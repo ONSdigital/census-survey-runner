@@ -1,8 +1,10 @@
 import unittest
 
+import mock
+from tests.app.app_context_test_case import AppContextTestCase
+
 from app.data_model.questionnaire_store import QuestionnaireStore
 from app.storage.encrypted_questionnaire_storage import EncryptedQuestionnaireStorage
-from tests.app.app_context_test_case import AppContextTestCase
 
 
 class TestEncryptedQuestionnaireStorage(AppContextTestCase):
@@ -44,6 +46,13 @@ class TestEncryptedQuestionnaireStorage(AppContextTestCase):
         self.assertEqual((data, QuestionnaireStore.LATEST_VERSION), self.storage.get_user_data())
         self.storage.delete()
         self.assertEqual((None, None), self.storage.get_user_data())  # pylint: disable=protected-access
+
+    def test_stateless_store(self):
+        data = 'test'
+        self.storage.stateless_updates_enabled = True
+        with mock.patch.object(self.storage, '_find_questionnaire_state') as m_find:
+            self.storage.add_or_update(data, QuestionnaireStore.LATEST_VERSION)
+            m_find.assert_not_called()
 
 
 if __name__ == '__main__':

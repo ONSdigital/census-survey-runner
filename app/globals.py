@@ -1,6 +1,6 @@
 from flask import g, current_app, session as cookie_session
 from structlog import get_logger
-from app.settings import EQ_SESSION_ID, USER_IK
+from app.settings import EQ_SESSION_ID, USER_IK, EQ_STATELESS_QUESTIONNAIRE_STORE_WRITES
 
 from app.data_model.questionnaire_store import QuestionnaireStore
 from app.questionnaire.completeness import Completeness
@@ -15,7 +15,7 @@ def get_questionnaire_store(user_id, user_ik):
     store = g.get('_questionnaire_store')
     if store is None:
         pepper = current_app.eq['secret_store'].get_secret_by_name('EQ_SERVER_SIDE_STORAGE_ENCRYPTION_USER_PEPPER')
-        storage = EncryptedQuestionnaireStorage(user_id, user_ik, pepper)
+        storage = EncryptedQuestionnaireStorage(user_id, user_ik, pepper, stateless_updates_enabled=EQ_STATELESS_QUESTIONNAIRE_STORE_WRITES)
         store = g._questionnaire_store = QuestionnaireStore(storage)
 
     return store
