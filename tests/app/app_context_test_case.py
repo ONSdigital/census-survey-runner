@@ -1,10 +1,15 @@
 import unittest
+import warnings
 
 from flask import current_app
-from moto import mock_dynamodb2
 
 from app.setup import create_app
-from app.storage.data_access import get_table_name, TABLE_CONFIG, is_dynamodb_read_enabled
+from app.storage.data_access import TABLE_CONFIG, get_table_name, is_dynamodb_read_enabled
+
+with warnings.catch_warnings():
+    warnings.filterwarnings('ignore', category=DeprecationWarning)
+    from moto import mock_dynamodb2
+
 
 
 class AppContextTestCase(unittest.TestCase):

@@ -24,7 +24,6 @@ httmock = "*"
 "flake8-tuple" = "*"
 moto = "*"
 google-compute-engine = "*"
-typing = "*"
 
 [packages]
 colorama = "*"
@@ -53,4 +52,4 @@ flask-talisman = "*"
 marshmallow = "*"
 
 [requires]
-python_version = "3.4"
+python_version = "3.7"

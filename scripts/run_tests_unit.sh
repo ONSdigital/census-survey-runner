@@ -26,5 +26,11 @@ source ${DIR}/dev_settings.sh
 echo "Environment variables in use:"
 env | grep EQ_
 
+SPEC="$@"
+
+if [[ $SPEC == -* ]] || [[ -z "$SPEC" ]]; then
+  SPEC="tests"
+fi
+
 py.test --cov=app --cov-report html "$@"
-display_result $? 3 "Unit tests"
+# display_result $? 3 "Unit tests"
