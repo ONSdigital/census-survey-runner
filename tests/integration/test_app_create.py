@@ -10,7 +10,7 @@ from app.setup import create_app, versioned_url_for, get_database_uri
 from app.submitter.submitter import LogSubmitter, RabbitMQSubmitter, PubSubSubmitter
 
 
-class TestCreateApp(unittest.TestCase):
+class TestCreateApp(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def setUp(self):
         self._setting_overrides = {
             'SQLALCHEMY_DATABASE_URI': 'sqlite:////tmp/questionnaire.db'
@@ -216,3 +216,49 @@ class TestCreateApp(unittest.TestCase):
 
         # Then
         self.assertEqual(uri, 'sqlite://:@:/questionnaire.db')
+
+    def test_setup_from_database_uri(self):
+        self._setting_overrides['SQLALCHEMY_DATABASE_URI'] = 'foo.db'
+        application = MagicMock()
+        application.config = self._setting_overrides
+
+        uri = get_database_uri(application)
+        self.assertEqual(uri, 'foo.db')
+
+    def test_setup_dynamodb(self):
+        self._setting_overrides['EQ_STORAGE_BACKEND'] = 'dynamodb'
+        application = create_app(self._setting_overrides)
+        self.assertTrue(application.eq['dynamodb'])
+
+    def test_setup_s3(self):
+        self._setting_overrides['EQ_STORAGE_BACKEND'] = 's3'
+        application = create_app(self._setting_overrides)
+        self.assertTrue(application.eq['s3'])
+
+    def test_setup_redis(self):
+        self._setting_overrides['EQ_STORAGE_BACKEND'] = 'redis'
+        application = create_app(self._setting_overrides)
+        self.assertTrue(application.eq['redis'])
+
+    @patch('google.cloud.bigtable.Client')
+    def test_setup_bigtable(self, m_bigtable):  # pylint: disable=unused-argument
+        self._setting_overrides['EQ_STORAGE_BACKEND'] = 'bigtable'
+        application = create_app(self._setting_overrides)
+        self.assertTrue(application.eq['bigtable'])
+
+    @patch('google.cloud.storage.Client')
+    def test_setup_gcs(self, m_storage):  # pylint: disable=unused-argument
+        self._setting_overrides['EQ_STORAGE_BACKEND'] = 'gcs'
+        application = create_app(self._setting_overrides)
+        self.assertTrue(application.eq['gcsbucket'])
+
+    def test_setup_sql(self):
+        self._setting_overrides['EQ_STORAGE_BACKEND'] = 'sql'
+
+        db_string = 'sqlite:////tmp/test.db'
+        self._setting_overrides['SQLALCHEMY_DATABASE_URI'] = db_string
+
+        application = create_app(self._setting_overrides)
+        self.assertFalse(application.config['SQLALCHEMY_TRACK_MODIFICATIONS'])
+        self.assertEqual(60, application.config['SQLALCHEMY_POOL_RECYCLE'])
+        self.assertEqual(db_string, application.config['SQLALCHEMY_DATABASE_URI'])

@@ -16,14 +16,6 @@ if [ -z "$EQ_ENABLE_SECURE_SESSION_COOKIE" ]; then
     export EQ_ENABLE_SECURE_SESSION_COOKIE=False
 fi
 
-if [ -z "$EQ_RABBITMQ_HOST" ]; then
-  export EQ_RABBITMQ_HOST="localhost"
-fi
-
-if [ -z "$EQ_RABBITMQ_HOST_SECONDARY" ]; then
-  export EQ_RABBITMQ_HOST_SECONDARY="localhost"
-fi
-
 if [ -z "$SQLALCHEMY_DATABASE_URI" ]; then
   export SQLALCHEMY_DATABASE_URI="sqlite:////tmp/questionnaire.db"
 fi
@@ -40,24 +32,8 @@ if [ -z "$EQ_QUESTIONNAIRE_STATE_TABLE_NAME" ]; then
   export EQ_QUESTIONNAIRE_STATE_TABLE_NAME="dev-questionnaire-state"
 fi
 
-if [ -z "$EQ_QUESTIONNAIRE_STATE_DYNAMO_READ" ]; then
-  export EQ_QUESTIONNAIRE_STATE_DYNAMO_READ=True
-fi
-
-if [ -z "$EQ_QUESTIONNAIRE_STATE_DYNAMO_WRITE" ]; then
-  export EQ_QUESTIONNAIRE_STATE_DYNAMO_WRITE=True
-fi
-
 if [ -z "$EQ_SESSION_TABLE_NAME" ]; then
   export EQ_SESSION_TABLE_NAME="dev-eq-session"
-fi
-
-if [ -z "$EQ_SESSION_DYNAMO_READ" ]; then
-  export EQ_SESSION_DYNAMO_READ=True
-fi
-
-if [ -z "$EQ_SESSION_DYNAMO_WRITE" ]; then
-  export EQ_SESSION_DYNAMO_WRITE=True
 fi
 
 if [ -z "$EQ_USED_JTI_CLAIM_TABLE_NAME" ]; then

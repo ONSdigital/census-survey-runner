@@ -15,8 +15,11 @@ from flask_babel import Babel
 from flask_talisman import Talisman
 from flask_themes2 import Themes
 from flask_wtf.csrf import CSRFProtect
+from google.cloud import bigtable
+from google.cloud import storage
 from sdc.crypto.key_store import KeyStore, validate_required_keys
 from structlog import get_logger
+import redis
 
 from app import settings
 from app.authentication.authenticator import login_manager
@@ -86,6 +89,14 @@ def create_app(setting_overrides=None):  # noqa: C901  pylint: disable=too-compl
     setup_database(application)
 
     setup_dynamodb(application)
+
+    setup_s3(application)
+
+    setup_bigtable(application)
+
+    setup_gcs(application)
+
+    setup_redis(application)
 
     if application.config['EQ_SUBMITTER'] == 'rabbitmq':
         application.eq['submitter'] = RabbitMQSubmitter(
@@ -188,14 +199,15 @@ def get_database_uri(application):
 
 
 def setup_database(application):
-    application.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    application.config['SQLALCHEMY_POOL_RECYCLE'] = 60
-    application.config['SQLALCHEMY_DATABASE_URI'] = get_database_uri(application)
+    if application.config['EQ_STORAGE_BACKEND'] == 'sql':
+        application.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        application.config['SQLALCHEMY_POOL_RECYCLE'] = 60
+        application.config['SQLALCHEMY_DATABASE_URI'] = get_database_uri(application)
 
-    with application.app_context():
-        db.init_app(application)
-        db.create_all()
-        check_database()
+        with application.app_context():
+            db.init_app(application)
+            db.create_all()
+            check_database()
 
 
 def check_database():
@@ -218,14 +230,45 @@ def check_database():
 
 
 def setup_dynamodb(application):
-    # Number of additional connection attempts
-    config = Config(
-        retries={'max_attempts': application.config['EQ_DYNAMODB_MAX_RETRIES']},
-        max_pool_connections=application.config['EQ_DYNAMODB_MAX_POOL_CONNECTIONS'],
-    )
+    if application.config['EQ_STORAGE_BACKEND'] == 'dynamodb':
+        # Number of additional connection attempts
+        config = Config(
+            retries={'max_attempts': application.config['EQ_DYNAMODB_MAX_RETRIES']},
+            max_pool_connections=application.config['EQ_DYNAMODB_MAX_POOL_CONNECTIONS'],
+        )
 
-    application.eq['dynamodb'] = boto3.resource(
-        'dynamodb', endpoint_url=application.config['EQ_DYNAMODB_ENDPOINT'], config=config)
+        application.eq['dynamodb'] = boto3.resource(
+            'dynamodb', endpoint_url=application.config['EQ_DYNAMODB_ENDPOINT'], config=config)
+
+
+def setup_s3(application):
+    if application.config['EQ_STORAGE_BACKEND'] == 's3':
+        config = Config(
+            max_pool_connections=application.config['EQ_S3_MAX_POOL_CONNECTIONS'],
+        )
+
+        application.eq['s3'] = boto3.client('s3', config=config)
+
+
+def setup_redis(application):
+    if application.config['EQ_STORAGE_BACKEND'] == 'redis':
+        application.eq['redis'] = [redis.StrictRedis(host=application.config['EQ_REDIS_HOST'], port=6379, db=i) for i in range(4)]
+
+
+def setup_bigtable(application):
+    if application.config['EQ_STORAGE_BACKEND'] == 'bigtable':
+        client = bigtable.Client(application.config['EQ_BIGTABLE_PROJECT_ID'])
+        instance = client.instance(application.config['EQ_BIGTABLE_INSTANCE_ID'])
+
+        application.eq['bigtable'] = instance
+
+
+def setup_gcs(application):
+    if application.config['EQ_STORAGE_BACKEND'] == 'gcs':
+        client = storage.Client()
+        bucket = client.get_bucket(application.config['EQ_GCS_BUCKET_ID'])
+
+        application.eq['gcsbucket'] = bucket
 
 
 def setup_profiling(application):
