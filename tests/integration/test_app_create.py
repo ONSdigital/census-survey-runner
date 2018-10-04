@@ -7,7 +7,7 @@ from flask import Flask, request
 from flask_babel import Babel
 
 from app.setup import create_app, versioned_url_for, get_database_uri
-from app.submitter.submitter import LogSubmitter, RabbitMQSubmitter
+from app.submitter.submitter import LogSubmitter, RabbitMQSubmitter, PubSubSubmitter
 
 
 class TestCreateApp(unittest.TestCase):
@@ -178,13 +178,19 @@ class TestCreateApp(unittest.TestCase):
             )
 
     def test_adds_rabbit_submitter_to_the_application(self):
-        self._setting_overrides['EQ_RABBITMQ_ENABLED'] = True
+        self._setting_overrides['EQ_SUBMITTER'] = 'rabbitmq'
         application = create_app(self._setting_overrides)
 
         self.assertIsInstance(application.eq['submitter'], RabbitMQSubmitter)
 
+    def test_adds_pubsub_submitter_to_the_application(self):
+        self._setting_overrides['EQ_SUBMITTER'] = 'pubsub'
+        application = create_app(self._setting_overrides)
+
+        self.assertIsInstance(application.eq['submitter'], PubSubSubmitter)
+
     def test_defaults_to_adding_the_log_submitter_to_the_application(self):
-        self._setting_overrides['EQ_RABBITMQ_ENABLED'] = False
+        self._setting_overrides['EQ_SUBMITTER'] = 'log'
         application = create_app(self._setting_overrides)
 
         self.assertIsInstance(application.eq['submitter'], LogSubmitter)

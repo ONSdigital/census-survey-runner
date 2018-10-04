@@ -1,3 +1,4 @@
+from google.cloud.pubsub_v1 import PublisherClient
 from pika import BasicProperties
 from pika import BlockingConnection
 from pika import URLParameters
@@ -12,6 +13,22 @@ class LogSubmitter():  # pylint: disable=no-self-use
     def send_message(self, message, queue, tx_id):  # pylint: disable=unused-argument
         logger.info('sending message')
         logger.info('message payload', message=message, queue=queue)
+        return True
+
+
+class PubSubSubmitter():  # pylint: disable=no-self-use
+
+    def __init__(self, project_id, topic):
+        self.publisher = PublisherClient()
+
+        self.topic_path = 'projects/{project_id}/topics/{topic}'.format(
+            project_id=project_id,
+            topic=topic,
+        )
+
+    def send_message(self, message, queue, tx_id):  # pylint: disable=unused-argument
+        logger.info('sending message')
+        self.publisher.publish(self.topic_path, str(message).encode('utf8'))
         return True
 
 

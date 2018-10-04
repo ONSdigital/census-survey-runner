@@ -45,11 +45,16 @@ EQ_ENABLE_LIVE_RELOAD = parse_mode(os.getenv('EQ_ENABLE_LIVE_RELOAD', 'False'))
 EQ_SECRETS_FILE = os.getenv('EQ_SECRETS_FILE', 'secrets.yml')
 EQ_KEYS_FILE = os.getenv('EQ_KEYS_FILE', 'keys.yml')
 
+EQ_SUBMITTER = os.getenv('EQ_SUBMITTER', 'log')
+
 EQ_RABBITMQ_HOST = get_env_or_fail('EQ_RABBITMQ_HOST')
 EQ_RABBITMQ_HOST_SECONDARY = get_env_or_fail('EQ_RABBITMQ_HOST_SECONDARY')
 EQ_RABBITMQ_PORT = int(os.getenv('EQ_RABBITMQ_PORT', '5672'))
 EQ_RABBITMQ_QUEUE_NAME = os.getenv('EQ_RABBITMQ_QUEUE_NAME', 'submit_q')
-EQ_RABBITMQ_ENABLED = parse_mode(os.getenv('EQ_RABBITMQ_ENABLED', 'True'))
+
+EQ_PUBSUB_PROJECT_ID = os.getenv('EQ_PUBSUB_PROJECT_ID', 'dev-eq')
+EQ_PUBSUB_TOPIC = os.getenv('EQ_PUBSUB_TOPIC', 'survey-runner')
+
 EQ_NEW_RELIC_CONFIG_FILE = os.getenv('EQ_NEW_RELIC_CONFIG_FILE', './newrelic.ini')
 EQ_SESSION_TIMEOUT_SECONDS = int(os.getenv('EQ_SESSION_TIMEOUT_SECONDS', str(45 * 60)))
 EQ_SESSION_TIMEOUT_GRACE_PERIOD_SECONDS = int(os.getenv('EQ_SESSION_TIMEOUT_GRACE_PERIOD_SECONDS', '30'))
