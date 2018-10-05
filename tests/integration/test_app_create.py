@@ -6,7 +6,6 @@ from mock import patch, MagicMock
 from flask import Flask, request
 from flask_babel import Babel
 
-from app import settings
 from app.setup import create_app, versioned_url_for, get_database_uri
 from app.submitter.submitter import LogSubmitter, RabbitMQSubmitter
 
@@ -41,8 +40,9 @@ class TestCreateApp(unittest.TestCase):
     # Should new relic have direct access to settings?
     # Probably better for create app to have the control
     def test_setups_newrelic(self):
+        self._setting_overrides['EQ_NEW_RELIC_ENABLED'] = True
+
         with patch('newrelic.agent.initialize') as new_relic:
-            settings.EQ_NEW_RELIC_ENABLED = 'True'
             create_app(self._setting_overrides)
             self.assertEqual(new_relic.call_count, 1)
 
@@ -184,7 +184,7 @@ class TestCreateApp(unittest.TestCase):
         self.assertIsInstance(application.eq['submitter'], RabbitMQSubmitter)
 
     def test_defaults_to_adding_the_log_submitter_to_the_application(self):
-        settings.EQ_RABBITMQ_ENABLED = False
+        self._setting_overrides['EQ_RABBITMQ_ENABLED'] = False
         application = create_app(self._setting_overrides)
 
         self.assertIsInstance(application.eq['submitter'], LogSubmitter)

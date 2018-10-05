@@ -1,18 +1,20 @@
+import json
 import os
 import re
 import unittest
-import json
+import warnings
 
 from bs4 import BeautifulSoup
-from moto import mock_dynamodb2
-
 from sdc.crypto.key_store import KeyStore
+from tests.app.app_context_test_case import setup_tables
+from tests.integration.create_token import TokenGenerator
 
 from app.keys import KEY_PURPOSE_AUTHENTICATION, KEY_PURPOSE_SUBMISSION
 from app.setup import create_app
-from tests.app.app_context_test_case import setup_tables
 
-from tests.integration.create_token import TokenGenerator
+with warnings.catch_warnings():
+    warnings.filterwarnings('ignore', category=DeprecationWarning)
+    from moto import mock_dynamodb2
 
 EQ_USER_AUTHENTICATION_RRM_PRIVATE_KEY_KID = '709eb42cfee5570058ce0711f730bfbb7d4c8ade'
 SR_USER_AUTHENTICATION_PUBLIC_KEY_KID = 'e19091072f920cbf3ca9f436ceba309e7d814a62'
