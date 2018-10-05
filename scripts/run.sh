@@ -10,8 +10,9 @@ if [ "$EQ_RUN_LOCAL_LINT" = True ]; then
     ./scripts/run_lint.sh
 
     echo "Testing schemas"
-    ./scripts/test_schemas.sh data/en
-    ./scripts/test_schemas.sh data/cy
+    echo "...bypassing schema tests for census fork"
+    # ./scripts/test_schemas.sh data/en
+    # ./scripts/test_schemas.sh data/cy
 fi
 
 if [ "$EQ_RUN_LOCAL_TESTS" = True ]; then
