@@ -76,6 +76,10 @@ if [ -z "$EQ_USED_JTI_CLAIM_DYNAMO_WRITE" ]; then
   export EQ_USED_JTI_CLAIM_DYNAMO_WRITE=True
 fi
 
+if [ -z "$EQ_STATELESS_QUESTIONNAIRE_STORE_WRITES" ]; then
+  export EQ_STATELESS_QUESTIONNAIRE_STORE_WRITES=False
+fi
+
 if [ -z "$AWS_DEFAULT_REGION" ]; then
   export AWS_DEFAULT_REGION=eu-west-1
 fi
