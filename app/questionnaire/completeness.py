@@ -22,6 +22,10 @@ class Completeness:
         self.metadata = metadata
         self.schema = schema
 
+        self._block_states = {}
+        self._group_states = {}
+        self._section_states = {}
+
     def is_section_complete(self, section):
         return self.get_state_for_section(section) == self.COMPLETED
 
@@ -41,6 +45,10 @@ class Completeness:
         if isinstance(section, str):
             # lookup section by section ID
             section = self.schema.get_section(section)
+
+        section_state = self._section_states.get(section['id'])
+        if section_state:
+            return section_state
 
         group_states = [
             self.get_state_for_group(group) for group in section['groups']
@@ -64,12 +72,18 @@ class Completeness:
             elif all(state in self.COMPLETED_STATES for state in group_states):
                 section_state = self.COMPLETED
 
+        self._section_states[section['id']] = section_state
         return section_state
 
     def get_state_for_group(self, group, group_instance=None):
         if isinstance(group, str):
             # lookup group by group ID
             group = self.schema.get_group(group)
+
+        cache_key = f'{group["id"]}-{group_instance}'
+        group_state = self._group_states.get(cache_key)
+        if group_state:
+            return group_state
 
         if (QuestionnaireSchema.is_confirmation_group(group) or
                 QuestionnaireSchema.is_summary_group(group)):
@@ -86,26 +100,9 @@ class Completeness:
             self._get_block_states_for_group(group, group_instance)
         ]
 
-        def eval_state(state_to_compare):
-            return (state == state_to_compare for state in block_states)
+        group_state = self._get_group_state_from_block_states(block_states)
 
-        group_state = self.NOT_STARTED
-
-        if all(eval_state(self.SKIPPED)):
-            group_state = self.SKIPPED
-
-        elif not self.routing_path:
-            group_state = self.NOT_STARTED
-
-        elif all(eval_state(self.INVALID)):
-            group_state = self.INVALID
-
-        elif all(state in self.COMPLETED_STATES for state in block_states):
-            group_state = self.COMPLETED
-
-        elif any(eval_state(self.COMPLETED)):
-            group_state = self.STARTED
-
+        self._group_states[cache_key] = group_state
         return group_state
 
     def get_first_incomplete_location_in_survey(self):
@@ -145,13 +142,15 @@ class Completeness:
             for block in group['blocks']:
                 location = Location(group['id'], current_instance, block['id'])
 
-                if self._should_skip(block):
-                    state = self.SKIPPED
-                elif self._is_valid_for_completeness(block, location):
-                    state = self.COMPLETED if self.is_block_complete(location) else self.NOT_STARTED
-                else:
-                    # block is not a question block or is not on the routing path
-                    state = self.INVALID
+                state = self._block_states.get(location)
+                if not state:
+                    if self._should_skip(block):
+                        state = self.SKIPPED
+                    elif self._is_valid_for_completeness(block, location):
+                        state = self.COMPLETED if self.is_block_complete(location) else self.NOT_STARTED
+                    else:
+                        # block is not a question block or is not on the routing path
+                        state = self.INVALID
 
                 yield location, state
 
@@ -168,6 +167,29 @@ class Completeness:
                 QuestionnaireSchema.is_summary_section(section) or
                 QuestionnaireSchema.is_confirmation_section(section))
         )
+
+    def _get_group_state_from_block_states(self, block_states):
+        def eval_state(state_to_compare):
+            return (state == state_to_compare for state in block_states)
+
+        group_state = self.NOT_STARTED
+
+        if all(eval_state(self.SKIPPED)):
+            group_state = self.SKIPPED
+
+        elif not self.routing_path:
+            group_state = self.NOT_STARTED
+
+        elif all(eval_state(self.INVALID)):
+            group_state = self.INVALID
+
+        elif all(state in self.COMPLETED_STATES for state in block_states):
+            group_state = self.COMPLETED
+
+        elif any(eval_state(self.COMPLETED)):
+            group_state = self.STARTED
+
+        return group_state
 
     def _should_skip(self, group_or_block):
         return (
