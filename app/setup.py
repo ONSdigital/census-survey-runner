@@ -12,7 +12,6 @@ import yaml
 from botocore.config import Config
 from flask import Flask, url_for
 from flask_babel import Babel
-from flask_caching import Cache
 from flask_talisman import Talisman
 from flask_themes2 import Themes
 from flask_wtf.csrf import CSRFProtect
@@ -42,8 +41,6 @@ CSP_POLICY = {
     'connect-src': ["'self'", 'https://www.google-analytics.com', 'https://cdn.ons.gov.uk'],
     'img-src': ["'self'", 'data:', 'https://www.google-analytics.com', 'https://cdn.ons.gov.uk'],
 }
-
-cache = Cache()
 
 logger = get_logger()
 
@@ -130,12 +127,6 @@ def create_app(setting_overrides=None):  # noqa: C901  pylint: disable=too-compl
 
     if application.config['EQ_DEV_MODE']:
         start_dev_mode(application)
-
-    if application.config['EQ_ENABLE_CACHE']:
-        cache.init_app(application, config={'CACHE_TYPE': 'simple'})
-    else:
-        # no cache and silence warning
-        cache.init_app(application, config={'CACHE_NO_NULL_WARNING': True})
 
     # Switch off flask default autoescaping as content is html encoded
     # during schema/metadata/summary context (and navigition) generation
