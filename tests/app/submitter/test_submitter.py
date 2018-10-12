@@ -4,10 +4,10 @@ from unittest import TestCase
 from mock import patch, Mock, call
 from pika.exceptions import AMQPError
 
-from app.submitter.submitter import RabbitMQSubmitter
+from app.submitter.submitter import RabbitMQSubmitter, PubSubSubmitter
 
 
-class TestSubmitter(TestCase):
+class TestRabbitMQSubmitter(TestCase):
     def setUp(self):
         self.queue_name = 'test_queue'
         self.host1 = 'host1'
@@ -142,3 +142,16 @@ class TestSubmitter(TestCase):
             properties = call_args[1]['properties']
             headers = properties.headers
             self.assertEqual(len(headers), 0)
+
+
+class TestPubSubSubmitter(TestCase):
+
+    def test_send_message(self):
+        with patch('app.submitter.submitter.PublisherClient') as publisher_mock:
+            submitter = PubSubSubmitter(project_id='test_project', topic='test_topic')
+            published = submitter.send_message(message={}, queue='test_queue', tx_id='12345')
+
+            call_args = publisher_mock.return_value.publish.call_args
+            self.assertEqual(call_args[0][1], b'{}')
+
+            self.assertTrue(published, 'send_message should publish message')
