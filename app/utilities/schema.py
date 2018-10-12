@@ -1,4 +1,6 @@
 import os
+from copy import deepcopy
+
 import requests
 import simplejson as json
 
@@ -6,9 +8,10 @@ from structlog import get_logger
 from werkzeug.exceptions import NotFound
 
 from app.questionnaire.questionnaire_schema import QuestionnaireSchema, DEFAULT_LANGUAGE_CODE
-from app.setup import cache
 
 logger = get_logger()
+schema_cache = {}
+url_schema_cache = {}
 
 DEFAULT_SCHEMA_DIR = 'data'
 
@@ -23,12 +26,16 @@ def load_schema_from_session_data(session_data):
     return load_schema_from_metadata(vars(session_data))
 
 
-@cache.memoize()
 def load_schema_from_params(eq_id, form_type, language_code=None):
     language_code = language_code or DEFAULT_LANGUAGE_CODE
-    schema_json = _load_schema_file('{}_{}.json'.format(eq_id, form_type), language_code)
+    cache_key = (eq_id, form_type, language_code)
 
-    return QuestionnaireSchema(schema_json, language_code)
+    if cache_key not in schema_cache:
+        schema_json = _load_schema_file('{}_{}.json'.format(eq_id, form_type), language_code)
+
+        schema_cache[cache_key] = QuestionnaireSchema(schema_json, language_code)
+
+    return deepcopy(schema_cache[cache_key])
 
 
 def _load_schema_file(schema_file, language_code):
@@ -55,21 +62,25 @@ def _load_schema_file(schema_file, language_code):
         raise e
 
 
-@cache.memoize()
 def load_schema_from_url(survey_url, language_code):
     language_code = language_code or DEFAULT_LANGUAGE_CODE
-    logger.info('loading schema from URL', survey_url=survey_url, language_code=language_code)
+    cache_key = (survey_url, language_code)
 
-    constructed_survey_url = '{}?language={}'.format(survey_url, language_code)
+    if cache_key not in url_schema_cache:
+        logger.info('loading schema from URL', survey_url=survey_url, language_code=language_code)
 
-    req = requests.get(constructed_survey_url)
-    schema_response = req.content.decode()
+        constructed_survey_url = '{}?language={}'.format(survey_url, language_code)
 
-    if req.status_code == 404:
-        logger.error('no schema exists', survey_url=constructed_survey_url)
-        raise NotFound
+        req = requests.get(constructed_survey_url)
+        schema_response = req.content.decode()
 
-    return QuestionnaireSchema(json.loads(schema_response), language_code)
+        if req.status_code == 404:
+            logger.error('no schema exists', survey_url=constructed_survey_url)
+            raise NotFound
+
+        url_schema_cache[cache_key] = QuestionnaireSchema(json.loads(schema_response), language_code)
+
+    return deepcopy(url_schema_cache[cache_key])
 
 
 def get_schema_path(language_code, schema_dir=DEFAULT_SCHEMA_DIR):
