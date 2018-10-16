@@ -4,7 +4,7 @@ import warnings
 from flask import current_app
 
 from app.setup import create_app
-from app.storage.data_access import TABLE_CONFIG, get_table_name, is_dynamodb_read_enabled
+from app.storage.dynamodb_api import TABLE_CONFIG
 
 with warnings.catch_warnings():
     warnings.filterwarnings('ignore', category=DeprecationWarning)
@@ -18,6 +18,7 @@ class AppContextTestCase(unittest.TestCase):
     and destroys it on tearDown
     """
     LOGIN_DISABLED = False
+    setting_overrides = {}
 
     def setUp(self):
         self._ddb = mock_dynamodb2()
@@ -28,6 +29,7 @@ class AppContextTestCase(unittest.TestCase):
             'LOGIN_DISABLED': self.LOGIN_DISABLED,
             'EQ_DYNAMODB_ENDPOINT': None,
         }
+        setting_overrides.update(self.setting_overrides)
         self._app = create_app(setting_overrides)
 
         self._app.config['SERVER_NAME'] = 'test.localdomain'
@@ -46,13 +48,12 @@ class AppContextTestCase(unittest.TestCase):
 
 
 def setup_tables():
-    for config in TABLE_CONFIG.values():
-        if is_dynamodb_read_enabled(config):
-            table_name = get_table_name(config)
-            if table_name:
-                current_app.eq['dynamodb'].create_table(
-                    TableName=table_name,
-                    AttributeDefinitions=[{'AttributeName': config['key_field'], 'AttributeType': 'S'}],
-                    KeySchema=[{'AttributeName': config['key_field'], 'KeyType': 'HASH'}],
-                    ProvisionedThroughput={'ReadCapacityUnits': 1, 'WriteCapacityUnits': 1}
-                )
+    if current_app.config['EQ_STORAGE_BACKEND'] == 'dynamodb':
+        for config in TABLE_CONFIG.values():
+            table_name = current_app.config[config['table_name_key']]
+            current_app.eq['dynamodb'].create_table(
+                TableName=table_name,
+                AttributeDefinitions=[{'AttributeName': config['key_field'], 'AttributeType': 'S'}],
+                KeySchema=[{'AttributeName': config['key_field'], 'KeyType': 'HASH'}],
+                ProvisionedThroughput={'ReadCapacityUnits': 1, 'WriteCapacityUnits': 1}
+            )

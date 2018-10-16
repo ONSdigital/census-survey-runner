@@ -50,6 +50,11 @@ humanize = "*"
 flask-talisman = "*"
 marshmallow = "*"
 google-cloud-pubsub = "*"
+google-cloud-bigtable = "*"
+google-cloud-core = "*"
+google-cloud-storage = "*"
+ujson = "*"
+redis = "*"
 
 [requires]
 python_version = "3.7"
