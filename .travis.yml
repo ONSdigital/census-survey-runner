@@ -57,13 +57,14 @@ after_success:
     - pipenv run python-codacy-coverage -r coverage.xml
 deploy:
     - provider: script
-      script:
-          - docker build -t onsdigital/census-survey-runner:${TRAVIS_COMMIT::8} -f Dockerfile .
-          - docker build -t onsdigital/census-survey-runner-static:${TRAVIS_COMMIT::8} -f Dockerfile.static .
-          - echo "Pushing with tag [${TRAVIS_COMMIT::8}]"
-          - docker push onsdigital/census-survey-runner:${TRAVIS_COMMIT::8}
-          - docker push onsdigital/census-survey-runner-static:${TRAVIS_COMMIT::8}
-          - 'curl -d "{\"parameters\": {\"tag\": \"${TRAVIS_COMMIT::8}\"}" -H ''content-type: application/json'' http://spinnaker-api.catd.onsdigital.uk/webhooks/webhook/survey-runner-travis'
+      skip_cleanup: true
+      script: >
+          docker build -t onsdigital/census-survey-runner:${TRAVIS_COMMIT::8} -f Dockerfile . &&
+          docker build -t onsdigital/census-survey-runner-static:${TRAVIS_COMMIT::8} -f Dockerfile.static . &&
+          echo "Pushing with tag [${TRAVIS_COMMIT::8}]" &&
+          docker push onsdigital/census-survey-runner:${TRAVIS_COMMIT::8} &&
+          docker push onsdigital/census-survey-runner-static:${TRAVIS_COMMIT::8} &&
+          curl -d "{\"artifacts\": [{\"type\": \"docker/image\", \"name\": \"onsdigital/census-survey-runner\", \"reference\": \"onsdigital/census-survey-runner:${TRAVIS_COMMIT::8}\"}]}" -H "content-type: application/json" http://spinnaker-api.catd.onsdigital.uk/webhooks/webhook/survey-runner-travis
 branches:
     only:
         - master
