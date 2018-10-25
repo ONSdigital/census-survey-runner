@@ -55,10 +55,6 @@ after_success:
     - pipenv run bash <(curl -s https://codecov.io/bash)
     - pipenv run pip install codacy-coverage
     - pipenv run python-codacy-coverage -r coverage.xml
-deploy:
-    - provider: script
-      skip_cleanup: true
-      script: ./scripts/deploy.sh
 branches:
     only:
         - master
