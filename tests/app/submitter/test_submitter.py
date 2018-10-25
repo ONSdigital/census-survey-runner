@@ -4,7 +4,7 @@ from unittest import TestCase
 from mock import patch, Mock, call
 from pika.exceptions import AMQPError
 
-from app.submitter.submitter import RabbitMQSubmitter, PubSubSubmitter
+from app.submitter.submitter import RabbitMQSubmitter, PubSubSubmitter, GCSSubmitter
 
 
 class TestRabbitMQSubmitter(TestCase):
@@ -153,5 +153,20 @@ class TestPubSubSubmitter(TestCase):
 
             call_args = publisher_mock.return_value.publish.call_args
             self.assertEqual(call_args[0][1], b'{}')
+
+            self.assertTrue(published, 'send_message should publish message')
+
+
+class TestGCSSubmitter(TestCase):
+
+    def test_send_message(self):
+        with patch('app.submitter.submitter.storage.Client') as m_client:
+            submitter = GCSSubmitter(bucket_name='bucketname')
+            published = submitter.send_message(message={}, queue='ignored', tx_id='12345')
+
+            m_bucket = m_client.return_value.get_bucket.return_value
+            m_blob = m_bucket.blob.return_value
+            call_args = m_blob.upload_from_string.call_args
+            self.assertEqual(call_args[0][0], b'{}')
 
             self.assertTrue(published, 'send_message should publish message')

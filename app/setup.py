@@ -30,7 +30,13 @@ from app.globals import get_session_store
 from app.keys import KEY_PURPOSE_SUBMISSION
 from app.new_relic import setup_newrelic
 from app.secrets import SecretStore, validate_required_secrets
-from app.submitter.submitter import LogSubmitter, RabbitMQSubmitter, PubSubSubmitter
+from app.submitter.submitter import (
+    LogSubmitter,
+    RabbitMQSubmitter,
+    PubSubSubmitter,
+    GCSSubmitter,
+)
+
 
 CACHE_HEADERS = {
     'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -110,6 +116,10 @@ def create_app(setting_overrides=None):  # noqa: C901  pylint: disable=too-compl
         application.eq['submitter'] = PubSubSubmitter(
             project_id=application.config['EQ_PUBSUB_PROJECT_ID'],
             topic=application.config['EQ_PUBSUB_TOPIC'],
+        )
+    elif application.config['EQ_SUBMITTER'] == 'gcs':
+        application.eq['submitter'] = GCSSubmitter(
+            bucket_name=application.config['EQ_GCS_SUBMISSION_BUCKET_ID'],
         )
     else:
         application.eq['submitter'] = LogSubmitter()
