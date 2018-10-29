@@ -28,7 +28,7 @@ def with_session_timeout(func):
             *args,
             session_timeout=session_timeout,
             session_timeout_prompt=session_timeout_prompt,
-            **kwargs
+            **kwargs,
         )
 
     return session_wrapper
@@ -87,5 +87,5 @@ def render_template(template, **kwargs):
         template,
         survey_title=TemplateRenderer.safe_content(g.schema.json['title']),
         survey_id=g.schema.json['survey_id'],
-        **kwargs
+        **kwargs,
     )

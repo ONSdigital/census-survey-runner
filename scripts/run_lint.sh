@@ -18,7 +18,7 @@ function display_result {
   fi
 }
 
-flake8 --max-complexity 10 --count
+flake8 --ignore=W504 --max-complexity 10 --count
 display_result $? 1 "Flake 8 code style check"
 
 pylint --reports=n --output-format=colorized --rcfile=.pylintrc -j 0 ./app ./tests
