@@ -55,6 +55,7 @@ google-cloud-core = "*"
 google-cloud-storage = "*"
 ujson = "*"
 redis = "*"
+grpcio = "==1.15.0"
 
 [requires]
 python_version = "3.7"
