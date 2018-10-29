@@ -737,7 +737,7 @@ def _render_template(context, current_location, template, front_end_navigation, 
         previous_location=previous_url,
         page_title=page_title,
         metadata=kwargs.pop('metadata_context'),  # `metadata_context` is used as `metadata` in the jinja templates
-        **kwargs
+        **kwargs,
     )
 
 
