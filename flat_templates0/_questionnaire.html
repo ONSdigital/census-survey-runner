@@ -1,0 +1,36 @@
+{% extends '_twocol.html' %}
+
+{% block page_title %}{{page_title}}{% endblock %}
+
+{% set block = content.block %}
+{% set form = content.form %}
+
+{% block sidebar %}
+  {% if navigation %}
+    {% include 'navigation.html' %}
+  {% endif %}
+{% endblock %}
+
+{% block main %}
+
+    {% block form_errors %}{% endblock %}
+
+    <form class="form qa-questionnaire-form" role="form" method="POST" autocomplete="off" novalidate>
+      {{ content.csrf_token }}
+
+      {% block form_content %}
+        <div class="group" id="{{'todo:groupid'}}">
+            {% include 'block.html' %}
+        </div>
+      {% endblock form_content %}
+
+      {% block submit_button %}
+      <button class="btn" data-qa="btn-submit" type="submit" name="action[save_continue]">{{ "Save and continue" }}</button>
+      {% endblock %}
+
+      <div class="u-mb-m">
+        <button class="btn btn--secondary js-btn-save" data-qa="btn-save-sign-out" type="submit" name="action[save_sign_out]">{% block save_sign_out_button_text %}{{ "Save and complete later" }}{% endblock %}</button>
+      </div>
+    </form>
+
+{% endblock main %}
