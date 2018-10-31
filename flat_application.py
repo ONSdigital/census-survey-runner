@@ -8,6 +8,7 @@ import boto3
 import yaml
 from botocore.config import Config
 from flask import Flask, render_template, request, session
+from jwcrypto import jwe
 from sdc.crypto.decrypter import decrypt
 from sdc.crypto.key_store import KeyStore
 from werkzeug.utils import redirect
@@ -15,6 +16,7 @@ from werkzeug.utils import redirect
 from app.authentication.user_id_generator import UserIDGenerator
 from app.keys import KEY_PURPOSE_AUTHENTICATION
 from app.storage.metadata_parser import parse_runner_claims
+from app.storage.storage_encryption import StorageEncryption
 
 app = Flask(__name__, template_folder='flat_templates')
 
@@ -34,6 +36,8 @@ with open(os.getenv('EQ_SECRETS_FILE', 'secrets.yml')) as secrets_file:
     secrets = yaml.safe_load(secrets_file)['secrets']
 
 app.secret_key = secrets['EQ_SECRET_KEY']
+
+pepper = secrets['EQ_SERVER_SIDE_STORAGE_ENCRYPTION_USER_PEPPER']
 
 id_generator = UserIDGenerator(10000, secrets['EQ_SERVER_SIDE_STORAGE_USER_ID_SALT'], secrets['EQ_SERVER_SIDE_STORAGE_USER_IK_SALT'])
 
@@ -61,11 +65,29 @@ def make_date(key, group_instance):
     return {'answer_id': key, 'answer_instance': 0, 'group_instance': group_instance, 'value': value}
 
 
-def put_answers(user_id, answers):
+def encrypt_data(key, data):
+    jwe_token = jwe.JWE(plaintext=json.dumps(data), protected={'alg': 'dir', 'enc': 'A256GCM', 'kid': '1,1'})
+    jwe_token.add_recipient(key)
+    return jwe_token.serialize(compact=True)
+
+
+def decrypt_data(key, encrypted_token):
+    jwe_token = jwe.JWE(algs=['dir', 'A256GCM'])
+    jwe_token.deserialize(encrypted_token, key)
+    return json.loads(jwe_token.payload.decode())
+
+
+def put_answers(user_id, answers, key):
     table = dynamodb.Table(answers_table_name)
-    # TODO encrypt
-    response = table.put_item(Item={'user_id': user_id, 'answers': answers})['ResponseMetadata']['HTTPStatusCode']
+    response = table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})['ResponseMetadata']['HTTPStatusCode']
     return response == 200
+
+
+def get_answers(user_id, key):
+    table = dynamodb.Table(answers_table_name)
+    response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
+    item = response.get('Item')
+    return decrypt_data(key, item['answers']) if item else []
 
 
 def json_safe_answer(a):
@@ -76,20 +98,18 @@ def json_safe_answer(a):
     return a
 
 
-def get_answers(user_id):
-    table = dynamodb.Table(answers_table_name)
-    response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
-    item = response.get('Item')
-    return item['answers'] if item else []
-
-
 @app.route('/<int:n>', methods=['GET', 'POST'])
-def main(n):
-    answers = get_answers(session['user_id'])
-
+def handle_question_page(n):
     if request.method == 'POST':
         # TODO csrf
 
+        if n == 76:
+            print('Submitting', get_submission())
+            # TODO validate and submit answers
+            return redirect('/77')
+
+        storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+        answers = get_answers(session['user_id'], storage_key)
         group_instance = int(pages[n].split('_')[2])
 
         if n == 7:
@@ -115,7 +135,7 @@ def main(n):
 
                     answers.append({'answer_id': k, 'answer_instance': answer_instance, 'group_instance': group_instance, 'value': v})
 
-        put_answers(session['user_id'], answers)
+        put_answers(session['user_id'], answers, storage_key)
 
         # TODO routing based on answers
         return redirect('/' + str(n+1))
@@ -146,8 +166,9 @@ def create_session():
 
 
 @app.route('/dump/submission')
-def dump():
-    answers = get_answers(session['user_id'])
+def get_submission():
+    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+    answers = get_answers(session['user_id'], storage_key)
     answers = [json_safe_answer(a) for a in answers]
 
     # TODO populate submission data properly
