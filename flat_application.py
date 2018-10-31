@@ -3,6 +3,7 @@ import os
 from decimal import Decimal
 
 from os import listdir
+from uuid import uuid4
 
 import boto3
 import yaml
@@ -41,7 +42,7 @@ pepper = secrets['EQ_SERVER_SIDE_STORAGE_ENCRYPTION_USER_PEPPER']
 
 id_generator = UserIDGenerator(10000, secrets['EQ_SERVER_SIDE_STORAGE_USER_ID_SALT'], secrets['EQ_SERVER_SIDE_STORAGE_USER_IK_SALT'])
 
-pages = {int(f.split('_')[0]): f for f in listdir('flat_templates')}
+pages = {int(f.split('_')[0]): f for f in listdir('flat_templates') if '_' in f}
 
 int_answers = {
     'overnight-visitors-answer',
@@ -98,51 +99,132 @@ def json_safe_answer(a):
     return a
 
 
+def handle_post(n=None, new_answers=None):
+    # TODO csrf
+
+    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+    answers = get_answers(session['user_id'], storage_key)
+    group_instance = int(pages[n].split('_')[2]) if n else 0
+
+    if new_answers is not None:
+        answers += new_answers
+    elif n == 23:
+        answers.append(make_date('date-of-birth-answer', group_instance))
+    elif n in (65, 71):
+        answers.append(make_date('visitor-date-of-birth-answer', group_instance))
+    else:
+        for k, v in request.form.items():
+            if k != 'csrf_token' and not k.startswith('action'):
+                if k in int_answers:
+                    v = int(v) if v else None
+                elif k in list_answers:
+                    v = request.form.getlist(k)
+
+                answers.append({'answer_id': k, 'answer_instance': 0, 'group_instance': group_instance, 'value': v})
+
+    put_answers(session['user_id'], answers, storage_key)
+
+
+members_pages = [
+    'introduction',
+    'permanent-or-family-home',
+    'household-composition',
+    'everyone-at-address-confirmation',
+    'overnight-visitors',
+    'household-relationships',
+    'completed'
+]
+
+household_pages = [
+    'introduction',
+    'type-of-accommodation',
+    'type-of-house',
+    'self-contained-accommodation',
+    'number-of-bedrooms',
+    'central-heating',
+    'own-or-rent',
+    'number-of-vehicles',
+    'completed'
+]
+
+
+@app.route('/introduction', methods=['GET', 'POST'])
+def handle_introduction():
+    if request.method == 'POST':
+        handle_post()
+        return redirect('/address')
+
+    return render_template('introduction.html')
+
+
+@app.route('/address', methods=['GET', 'POST'])
+def handle_address():
+    if request.method == 'POST':
+        handle_post()
+        return redirect('/members/introduction')
+
+    return render_template('address.html')
+
+
+@app.route('/members/<page>', methods=['GET', 'POST'])
+def handle_members(page):
+    if request.method == 'POST':
+        answers = None
+        if page == 'household-composition':
+            answers = []
+            for k, v in request.form.items():
+                if k.startswith('household-'):
+                    _, answer_instance, k = k.split('-', 2)
+                    answer_instance = int(answer_instance)
+                    answers.append({'answer_id': k, 'answer_instance': answer_instance, 'group_instance': 0,'value': v})
+        if page == 'household-relationships':
+            answers = [{'answer_id': 'household-relationships-answer', 'answer_instance': 0, 'group_instance': 0, 'value': request.form['household-relationships-answer-0']}]
+
+        handle_post(new_answers=answers)
+        i = members_pages.index(page) + 1
+        return redirect('/household/introduction' if i >= len(members_pages) else '/members/' + members_pages[i])
+
+    return render_template('members/' + page + '.html')
+
+
+@app.route('/household/<page>', methods=['GET', 'POST'])
+def handle_household(page):
+    if request.method == 'POST':
+        handle_post()
+        i = household_pages.index(page) + 1
+        return redirect('/18' if i >= len(household_pages) else '/household/' + household_pages[i])
+
+    return render_template('household/' + page + '.html')
+
+
 @app.route('/<int:n>', methods=['GET', 'POST'])
 def handle_question_page(n):
     if request.method == 'POST':
-        # TODO csrf
+        handle_post(n)
 
-        if n == 76:
-            print('Submitting', get_submission())
-            # TODO validate and submit answers
-            return redirect('/77')
+        if n == 75:
+            return redirect('/completed')
 
-        storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
-        answers = get_answers(session['user_id'], storage_key)
-        group_instance = int(pages[n].split('_')[2])
-
-        if n == 7:
-            answers.append({'answer_id': 'household-relationships-answer', 'answer_instance': 0, 'group_instance': group_instance, 'value': request.form['household-relationships-answer-0']})
-        elif n == 23:
-            answers.append(make_date('date-of-birth-answer', group_instance))
-        elif n in (65, 71):
-            answers.append(make_date('visitor-date-of-birth-answer', group_instance))
-        else:
-            for k, v in request.form.items():
-                if k != 'csrf_token' and not k.startswith('action'):
-
-                    answer_instance = 0
-                    if n == 4:
-                        ns, answer_instance, k = k.split('-', 2)
-                        assert ns == 'household'
-                        answer_instance = int(answer_instance)
-
-                    if k in int_answers:
-                        v = int(v)
-                    elif k in list_answers:
-                        v = request.form.getlist(k)
-
-                    answers.append({'answer_id': k, 'answer_instance': answer_instance, 'group_instance': group_instance, 'value': v})
-
-        put_answers(session['user_id'], answers, storage_key)
-
-        # TODO routing based on answers
-        return redirect('/' + str(n+1))
+        return redirect('/' + str(n + 1))
 
     # TODO add in existing form data
     # TODO add in variables e.g. household member name
     return render_template(pages[n])
+
+
+@app.route('/completed', methods=['GET', 'POST'])
+def handle_completed():
+    if request.method == 'POST':
+        print('Submitting', get_submission())
+        # TODO validate and submit answers
+        return redirect('/thank-you')
+
+    return render_template('completed.html')
+
+
+@app.route('/thank-you')
+def handle_thank_you():
+    return render_template('thank-you.html')
 
 
 @app.route('/session')
@@ -162,7 +244,18 @@ def create_session():
     session['user_id'] = user_id
     session['user_ik'] = user_ik
 
-    return redirect('/0')
+    return redirect('/introduction')
+
+
+@app.route('/fake_session')
+def create_fake_session():
+    if session:
+        session.clear()
+
+    session['user_id'] = str(uuid4())
+    session['user_ik'] = str(uuid4())
+
+    return redirect('/introduction')
 
 
 @app.route('/dump/submission')
