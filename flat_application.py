@@ -99,17 +99,14 @@ def json_safe_answer(a):
     return a
 
 
-def handle_post(n=None, new_answers=None):
+def handle_post(group_instance, n=None, new_answers=None):
     # TODO csrf
 
     storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
     answers = get_answers(session['user_id'], storage_key)
-    group_instance = int(pages[n].split('_')[2]) if n else 0
 
     if new_answers is not None:
         answers += new_answers
-    elif n == 23:
-        answers.append(make_date('date-of-birth-answer', group_instance))
     elif n in (65, 71):
         answers.append(make_date('visitor-date-of-birth-answer', group_instance))
     else:
@@ -123,6 +120,8 @@ def handle_post(n=None, new_answers=None):
                 answers.append({'answer_id': k, 'answer_instance': 0, 'group_instance': group_instance, 'value': v})
 
     put_answers(session['user_id'], answers, storage_key)
+
+    return answers
 
 
 members_pages = [
@@ -147,11 +146,52 @@ household_pages = [
     'completed'
 ]
 
+member_pages = [
+    'introduction',
+    'details-correct',
+    'over-16',
+    'private-response',
+    'sex',
+    'date-of-birth',
+    'marital-status',
+    'another-address',
+    'other-address',
+    'address-type',
+    'in-education',
+    'term-time-location',
+    'country-of-birth',
+    'carer',
+    'national-identity',
+    'ethnic-group',
+    'other-ethnic-group',
+    'language',
+    'religion',
+    'past-usual-address',
+    'passports',
+    'disability',
+    'qualifications',
+    'employment-type',
+    'jobseeker',
+    'job-availability',
+    'job-pending',
+    'occupation',
+    'ever-worked',
+    'main-job',
+    'hours-worked',
+    'work-travel',
+    'job-title',
+    'job-description',
+    'main-job-type',
+    'business-name',
+    'employers-business',
+    'completed'
+]
+
 
 @app.route('/introduction', methods=['GET', 'POST'])
 def handle_introduction():
     if request.method == 'POST':
-        handle_post()
+        handle_post(0)
         return redirect('/address')
 
     return render_template('introduction.html')
@@ -160,7 +200,7 @@ def handle_introduction():
 @app.route('/address', methods=['GET', 'POST'])
 def handle_address():
     if request.method == 'POST':
-        handle_post()
+        handle_post(0)
         return redirect('/members/introduction')
 
     return render_template('address.html')
@@ -180,7 +220,7 @@ def handle_members(page):
         if page == 'household-relationships':
             answers = [{'answer_id': 'household-relationships-answer', 'answer_instance': 0, 'group_instance': 0, 'value': request.form['household-relationships-answer-0']}]
 
-        handle_post(new_answers=answers)
+        handle_post(0, new_answers=answers)
         i = members_pages.index(page) + 1
         return redirect('/household/introduction' if i >= len(members_pages) else '/members/' + members_pages[i])
 
@@ -190,17 +230,53 @@ def handle_members(page):
 @app.route('/household/<page>', methods=['GET', 'POST'])
 def handle_household(page):
     if request.method == 'POST':
-        handle_post()
+        handle_post(0)
         i = household_pages.index(page) + 1
-        return redirect('/18' if i >= len(household_pages) else '/household/' + household_pages[i])
+        return redirect('/member/0/introduction' if i >= len(household_pages) else '/household/' + household_pages[i])
 
     return render_template('household/' + page + '.html')
+
+
+@app.route('/member/<int:group_instance>/<page>', methods=['GET', 'POST'])
+def handle_member(group_instance, page):
+    if request.method == 'POST':
+        answers = None
+        if page == 'date-of-birth':
+            answers = [make_date('date-of-birth-answer', group_instance)]
+
+        answers = handle_post(group_instance, new_answers=answers)
+
+        if page == 'private-response':
+            if request.form['private-response-answer'].startswith('Yes'):
+                return redirect('/member/' + str(group_instance) + '/request-private-response')
+
+        if page == 'request-private-response':
+            return redirect('/member/' + str(group_instance) + '/completed')
+
+        i = member_pages.index(page) + 1
+        if i < len(member_pages):
+            return redirect('/member/' + str(group_instance) + '/' + member_pages[i])
+
+        num_members = len([a for a in answers if a['answer_id'] == 'first-name'])
+
+        group_instance = int(group_instance) + 1
+
+        return redirect('/62' if group_instance >= num_members else '/member/' + str(group_instance) + '/introduction')
+
+    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+    answers = get_answers(session['user_id'], storage_key)
+    first_name = next(a for a in answers if a['answer_id'] == 'first-name' and a['answer_instance'] == group_instance)['value']
+    last_name = next(a for a in answers if a['answer_id'] == 'last-name' and a['answer_instance'] == group_instance)['value']
+
+    print('>>', first_name, last_name)
+
+    return render_template('member/' + page + '.html', first_name=first_name, last_name=last_name)
 
 
 @app.route('/<int:n>', methods=['GET', 'POST'])
 def handle_question_page(n):
     if request.method == 'POST':
-        handle_post(n)
+        handle_post(int(pages[n].split('_')[2]), n)
 
         if n == 75:
             return redirect('/completed')
