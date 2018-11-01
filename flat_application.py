@@ -231,7 +231,15 @@ def handle_members(page):
         i = members_pages.index(page) + 1
         return redirect('/household/introduction' if i >= len(members_pages) else '/members/' + members_pages[i])
 
-    return render_template('members/' + page + '.html')
+    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+    answers = get_answers(session['user_id'], storage_key)
+
+    first_names = [v for (k, v) in answers.items() if k.startswith('first-name-')]
+    middle_names = [v for (k, v) in answers.items() if k.startswith('middle-names-')]
+    last_names = [v for (k, v) in answers.items() if k.startswith('last-name-')]
+    members = [' '.join(n) for n in zip(first_names, middle_names, last_names)]
+
+    return render_template('members/' + page + '.html', members=members)
 
 
 @app.route('/household/<page>', methods=['GET', 'POST'])
@@ -264,7 +272,7 @@ def handle_member(group_instance, page):
         if i < len(member_pages):
             return redirect('/member/' + str(group_instance) + '/' + member_pages[i])
 
-        num_members = len([a for a in answers.keys() if a.startswith('first-name')])
+        num_members = len([a for a in answers.keys() if a.startswith('first-name-')])
 
         group_instance = int(group_instance) + 1
 
@@ -274,10 +282,10 @@ def handle_member(group_instance, page):
     answers = get_answers(session['user_id'], storage_key)
 
     first_name = answers[key('first-name', group_instance, 0)]
-    middle_name = answers.get(key('middle-name', group_instance, 0), '')
+    middle_names = answers[key('middle-names', group_instance, 0)]
     last_name = answers[key('last-name', group_instance, 0)]
 
-    return render_template('member/' + page + '.html', first_name=first_name, middle_name=middle_name, last_name=last_name)
+    return render_template('member/' + page + '.html', first_name=first_name, middle_names=middle_names, last_name=last_name)
 
 
 @app.route('/visitors_introduction', methods=['GET', 'POST'])

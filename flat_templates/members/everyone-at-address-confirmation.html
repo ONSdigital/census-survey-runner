@@ -212,7 +212,14 @@
   
 
   
-    <div class="block__description mars" data-qa="block-description"><h2 class='neptune'>Your household includes:</h2> <ul><li>Danny K Boje</li><li>Anjali K Yo</li></ul></div>
+    <div class="block__description mars" data-qa="block-description">
+      <h2 class='neptune'>Your household includes:</h2>
+      <ul>
+        {% for m in members %}
+          <li>{{ m }}</li>
+        {% endfor %}
+      </ul>
+    </div>
   
 
   
