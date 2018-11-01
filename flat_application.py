@@ -42,8 +42,6 @@ pepper = secrets['EQ_SERVER_SIDE_STORAGE_ENCRYPTION_USER_PEPPER']
 
 id_generator = UserIDGenerator(10000, secrets['EQ_SERVER_SIDE_STORAGE_USER_ID_SALT'], secrets['EQ_SERVER_SIDE_STORAGE_USER_IK_SALT'])
 
-pages = {int(f.split('_')[0]): f for f in listdir('flat_templates') if '_' in f}
-
 int_answers = {
     'overnight-visitors-answer',
     'number-of-bedrooms-answer',
@@ -99,16 +97,16 @@ def json_safe_answer(a):
     return a
 
 
-def handle_post(group_instance, n=None, new_answers=None):
+def handle_post(group_instance, new_answers=None):
     # TODO csrf
 
     storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
     answers = get_answers(session['user_id'], storage_key)
 
+    # TODO overwrite answers, unique based on answer_id, answer_instance, group_id
+
     if new_answers is not None:
         answers += new_answers
-    elif n in (65, 71):
-        answers.append(make_date('visitor-date-of-birth-answer', group_instance))
     else:
         for k, v in request.form.items():
             if k != 'csrf_token' and not k.startswith('action'):
@@ -187,6 +185,15 @@ member_pages = [
     'completed'
 ]
 
+visitor_pages = [
+    'name',
+    'sex',
+    'date-of-birth',
+    'uk-resident',
+    'address',
+    'completed'
+]
+
 
 @app.route('/introduction', methods=['GET', 'POST'])
 def handle_introduction():
@@ -261,31 +268,54 @@ def handle_member(group_instance, page):
 
         group_instance = int(group_instance) + 1
 
-        return redirect('/62' if group_instance >= num_members else '/member/' + str(group_instance) + '/introduction')
+        return redirect('/visitors_introduction' if group_instance >= num_members else '/member/' + str(group_instance) + '/introduction')
 
     storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
     answers = get_answers(session['user_id'], storage_key)
     first_name = next(a for a in answers if a['answer_id'] == 'first-name' and a['answer_instance'] == group_instance)['value']
     last_name = next(a for a in answers if a['answer_id'] == 'last-name' and a['answer_instance'] == group_instance)['value']
 
-    print('>>', first_name, last_name)
-
     return render_template('member/' + page + '.html', first_name=first_name, last_name=last_name)
 
 
-@app.route('/<int:n>', methods=['GET', 'POST'])
-def handle_question_page(n):
+@app.route('/visitors_introduction', methods=['GET', 'POST'])
+def handle_visitors_introduction():
     if request.method == 'POST':
-        handle_post(int(pages[n].split('_')[2]), n)
+        handle_post(0)
+        return redirect('/visitor/0/name')
 
-        if n == 75:
-            return redirect('/completed')
+    return render_template('visitors_introduction.html')
 
-        return redirect('/' + str(n + 1))
 
-    # TODO add in existing form data
-    # TODO add in variables e.g. household member name
-    return render_template(pages[n])
+@app.route('/visitor/<int:group_instance>/<page>', methods=['GET', 'POST'])
+def handle_visitor(group_instance, page):
+    if request.method == 'POST':
+        answers = None
+        if page == 'date-of-birth':
+            answers = [make_date('visitor-date-of-birth-answer', group_instance)]
+
+        answers = handle_post(group_instance, new_answers=answers)
+
+        i = visitor_pages.index(page) + 1
+        if i < len(visitor_pages):
+            return redirect('/visitor/' + str(group_instance) + '/' + visitor_pages[i])
+
+        num_visitors = next(a for a in answers if a['answer_id'] == 'overnight-visitors-answer')['value']
+
+        group_instance = int(group_instance) + 1
+
+        return redirect('/visitors_completed' if group_instance >= num_visitors else '/visitor/' + str(group_instance) + '/name')
+
+    return render_template('visitor/' + page + '.html', group_instance=group_instance)
+
+
+@app.route('/visitors_completed', methods=['GET', 'POST'])
+def handle_visitors_completed():
+    if request.method == 'POST':
+        handle_post(0)
+        return redirect('/completed')
+
+    return render_template('visitors_completed.html')
 
 
 @app.route('/completed', methods=['GET', 'POST'])
