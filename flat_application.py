@@ -1,5 +1,5 @@
-import json
 import os
+import ujson
 
 from uuid import uuid4
 
@@ -7,6 +7,8 @@ import boto3
 import yaml
 from botocore.config import Config
 from flask import Flask, render_template, request, session
+from google.cloud import storage
+from google.cloud.exceptions import NotFound
 from jwcrypto import jwe
 from sdc.crypto.decrypter import decrypt
 from sdc.crypto.key_store import KeyStore
@@ -19,14 +21,19 @@ from app.storage.storage_encryption import StorageEncryption
 
 app = Flask(__name__, template_folder='flat_templates')
 
-config = Config(
-    retries={'max_attempts': int(os.getenv('EQ_DYNAMODB_MAX_RETRIES', '5'))},
-    max_pool_connections=int(os.getenv('EQ_DYNAMODB_MAX_POOL_CONNECTIONS', '30')),
-)
+EQ_STORAGE_BACKEND = os.getenv('EQ_STORAGE_BACKEND', 'dynamodb')
 
-dynamodb = boto3.resource('dynamodb', endpoint_url=os.getenv('EQ_DYNAMODB_ENDPOINT'), config=config)
-
-answers_table_name = os.getenv('EQ_QUESTIONNAIRE_STATE_TABLE_NAME', 'dev-questionnaire-state')
+if EQ_STORAGE_BACKEND == 'dynamodb':
+    dynamodb = boto3.resource('dynamodb', endpoint_url=os.getenv('EQ_DYNAMODB_ENDPOINT'), config=Config(
+        retries={'max_attempts': int(os.getenv('EQ_DYNAMODB_MAX_RETRIES', '5'))},
+        max_pool_connections=int(os.getenv('EQ_DYNAMODB_MAX_POOL_CONNECTIONS', '30')),
+    ))
+    dynamodb_table_name = os.getenv('EQ_QUESTIONNAIRE_STATE_TABLE_NAME', 'dev-questionnaire-state')
+elif EQ_STORAGE_BACKEND == 'gcs':
+    client = storage.Client()
+    gcs_bucket = client.get_bucket(os.getenv('EQ_GCS_BUCKET_ID'))
+else:
+    raise Exception('Unknown storage backend {}'.format(EQ_STORAGE_BACKEND))
 
 with open(os.getenv('EQ_KEYS_FILE', 'keys.yml')) as f:
     key_store = KeyStore(yaml.safe_load(f))
@@ -40,13 +47,13 @@ pepper = secrets['EQ_SERVER_SIDE_STORAGE_ENCRYPTION_USER_PEPPER']
 
 id_generator = UserIDGenerator(10000, secrets['EQ_SERVER_SIDE_STORAGE_USER_ID_SALT'], secrets['EQ_SERVER_SIDE_STORAGE_USER_IK_SALT'])
 
-int_answers = {
+INT_ANSWERS = {
     'overnight-visitors-answer',
     'number-of-bedrooms-answer',
     'number-of-vehicles-answer'
 }
 
-list_answers = {
+LIST_ANSWERS = {
     'central-heating-answer',
     'national-identity-england-answer',
     'religion-answer',
@@ -56,7 +63,7 @@ list_answers = {
     'occupation-answer'
 }
 
-members_pages = [
+MEMBERS_PAGES = [
     'introduction',
     'permanent-or-family-home',
     'household-composition',
@@ -66,7 +73,7 @@ members_pages = [
     'completed'
 ]
 
-household_pages = [
+HOUSEHOLD_PAGES = [
     'introduction',
     'type-of-accommodation',
     'type-of-house',
@@ -78,7 +85,7 @@ household_pages = [
     'completed'
 ]
 
-member_pages = [
+MEMBER_PAGES = [
     'introduction',
     'details-correct',
     'over-16',
@@ -119,7 +126,7 @@ member_pages = [
     'completed'
 ]
 
-visitor_pages = [
+VISITOR_PAGES = [
     'name',
     'sex',
     'date-of-birth',
@@ -201,8 +208,8 @@ def handle_members(page):
             answers = parse_answers(0)
 
         update_answers(answers)
-        i = members_pages.index(page) + 1
-        return redirect('/household/introduction' if i >= len(members_pages) else '/members/{}'.format(members_pages[i]))
+        i = MEMBERS_PAGES.index(page) + 1
+        return redirect('/household/introduction' if i >= len(MEMBERS_PAGES) else '/members/{}'.format(MEMBERS_PAGES[i]))
 
     storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
     answers = get_answers(session['user_id'], storage_key)
@@ -222,8 +229,8 @@ def handle_household(page):
     if request.method == 'POST':
         answers = parse_answers(0)
         update_answers(answers)
-        i = household_pages.index(page) + 1
-        return redirect('/member/0/introduction' if i >= len(household_pages) else '/household/{}'.format(household_pages[i]))
+        i = HOUSEHOLD_PAGES.index(page) + 1
+        return redirect('/member/0/introduction' if i >= len(HOUSEHOLD_PAGES) else '/household/{}'.format(HOUSEHOLD_PAGES[i]))
 
     return render_template('household/{}.html'.format(page))
 
@@ -245,9 +252,9 @@ def handle_member(group_instance, page):
         if page == 'request-private-response':
             return redirect('/member/{}/completed'.format(group_instance))
 
-        i = member_pages.index(page) + 1
-        if i < len(member_pages):
-            return redirect('/member/{}/{}'.format(group_instance, member_pages[i]))
+        i = MEMBER_PAGES.index(page) + 1
+        if i < len(MEMBER_PAGES):
+            return redirect('/member/{}/{}'.format(group_instance, MEMBER_PAGES[i]))
 
         num_members = len([a for a in answers.keys() if a.startswith('first-name-')])
 
@@ -285,9 +292,9 @@ def handle_visitor(group_instance, page):
 
         answers = update_answers(answers)
 
-        i = visitor_pages.index(page) + 1
-        if i < len(visitor_pages):
-            return redirect('/visitor/{}/{}'.format(group_instance, visitor_pages[i]))
+        i = VISITOR_PAGES.index(page) + 1
+        if i < len(VISITOR_PAGES):
+            return redirect('/visitor/{}/{}'.format(group_instance, VISITOR_PAGES[i]))
 
         num_visitors = answers[ak('overnight-visitors-answer', 0, 0)]
 
@@ -363,11 +370,11 @@ def get_submission():
         }
     }
 
-    return json.dumps(submission)
+    return ujson.dumps(submission)
 
 
 def encrypt_data(key, data):
-    jwe_token = jwe.JWE(plaintext=json.dumps(data), protected={'alg': 'dir', 'enc': 'A256GCM', 'kid': '1,1'})
+    jwe_token = jwe.JWE(plaintext=ujson.dumps(data), protected={'alg': 'dir', 'enc': 'A256GCM', 'kid': '1,1'})
     jwe_token.add_recipient(key)
     return jwe_token.serialize(compact=True)
 
@@ -375,20 +382,30 @@ def encrypt_data(key, data):
 def decrypt_data(key, encrypted_token):
     jwe_token = jwe.JWE(algs=['dir', 'A256GCM'])
     jwe_token.deserialize(encrypted_token, key)
-    return json.loads(jwe_token.payload.decode())
+    return ujson.loads(jwe_token.payload.decode())
 
 
 def get_answers(user_id, key):
-    table = dynamodb.Table(answers_table_name)
-    response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
-    item = response.get('Item')
-    return decrypt_data(key, item['answers']) if item else {}
+    if EQ_STORAGE_BACKEND == 'dynamodb':
+        table = dynamodb.Table(dynamodb_table_name)
+        response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
+        item = response.get('Item')
+        return decrypt_data(key, item['answers']) if item else {}
+    elif EQ_STORAGE_BACKEND == 'gcs':
+        blob = gcs_bucket.blob('{}/{}'.format('flat', user_id))
+        try:
+            return decrypt_data(key, blob.download_as_string().decode())
+        except NotFound:
+            return {}
 
 
 def put_answers(user_id, answers, key):
-    table = dynamodb.Table(answers_table_name)
-    response = table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})['ResponseMetadata']['HTTPStatusCode']
-    return response == 200
+    if EQ_STORAGE_BACKEND == 'dynamodb':
+        table = dynamodb.Table(dynamodb_table_name)
+        table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})
+    elif EQ_STORAGE_BACKEND == 'gcs':
+        blob = gcs_bucket.blob('{}/{}'.format('flat', user_id))
+        blob.upload_from_string(encrypt_data(key, answers))
 
 
 def update_answers(new_answers):
@@ -415,9 +432,9 @@ def parse_answers(group_instance):
     answers = {}
     for k, v in request.form.items():
         if k != 'csrf_token' and not k.startswith('action'):
-            if k in int_answers:
+            if k in INT_ANSWERS:
                 v = int(v) if v else None
-            elif k in list_answers:
+            elif k in LIST_ANSWERS:
                 v = request.form.getlist(k)
 
             answers[ak(k, 0, group_instance)] = v
