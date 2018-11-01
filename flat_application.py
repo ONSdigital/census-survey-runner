@@ -129,63 +129,35 @@ visitor_pages = [
 ]
 
 
-def key(answer_id, answer_instance, group_instance):
-    return answer_id + '-' + str(answer_instance) + '-' + str(group_instance)
+@app.route('/session')
+def create_session():
+    if session:
+        session.clear()
+
+    decrypted_token = decrypt(token=request.args.get('token'), key_store=key_store, key_purpose=KEY_PURPOSE_AUTHENTICATION, leeway=120)
+
+    # TODO validate JTI
+
+    claims = parse_runner_claims(decrypted_token)
+
+    user_id = id_generator.generate_id(claims)
+    user_ik = id_generator.generate_ik(claims)
+
+    session['user_id'] = user_id
+    session['user_ik'] = user_ik
+
+    return redirect('/introduction')
 
 
-def make_date(answer_id, group_instance):
-    value = '{:04d}-{:02d}-{:02d}'.format(int(request.form[answer_id + '-year']), int(request.form[answer_id + '-month']), int(request.form[answer_id + '-day']))
+@app.route('/fake_session')
+def create_fake_session():
+    if session:
+        session.clear()
 
-    return {key(answer_id, 0, group_instance): value}
+    session['user_id'] = str(uuid4())
+    session['user_ik'] = str(uuid4())
 
-
-def encrypt_data(key, data):
-    jwe_token = jwe.JWE(plaintext=json.dumps(data), protected={'alg': 'dir', 'enc': 'A256GCM', 'kid': '1,1'})
-    jwe_token.add_recipient(key)
-    return jwe_token.serialize(compact=True)
-
-
-def decrypt_data(key, encrypted_token):
-    jwe_token = jwe.JWE(algs=['dir', 'A256GCM'])
-    jwe_token.deserialize(encrypted_token, key)
-    return json.loads(jwe_token.payload.decode())
-
-
-def get_answers(user_id, key):
-    table = dynamodb.Table(answers_table_name)
-    response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
-    item = response.get('Item')
-    return decrypt_data(key, item['answers']) if item else {}
-
-
-def put_answers(user_id, answers, key):
-    table = dynamodb.Table(answers_table_name)
-    response = table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})['ResponseMetadata']['HTTPStatusCode']
-    return response == 200
-
-
-def update_answers(new_answers):
-    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
-    answers = get_answers(session['user_id'], storage_key)
-    answers.update(new_answers)
-    put_answers(session['user_id'], answers, storage_key)
-    return answers
-
-
-def parse_answers(group_instance):
-    # TODO csrf
-
-    answers = {}
-    for k, v in request.form.items():
-        if k != 'csrf_token' and not k.startswith('action'):
-            if k in int_answers:
-                v = int(v) if v else None
-            elif k in list_answers:
-                v = request.form.getlist(k)
-
-            answers[key(k, 0, group_instance)] = v
-
-    return answers
+    return redirect('/introduction')
 
 
 @app.route('/introduction', methods=['GET', 'POST'])
@@ -217,20 +189,20 @@ def handle_members(page):
                 if k.startswith('household-'):
                     _, answer_instance, k = k.split('-', 2)
                     answer_instance = int(answer_instance)
-                    answers[key(k, answer_instance, 0)] = v
+                    answers[ak(k, answer_instance, 0)] = v
         elif page == 'household-relationships':
             answers = {}
             for k, v in request.form.items():
                 if k.startswith('household-relationships-answer-'):
                     _, answer_instance = k.rsplit('-', 1)
                     answer_instance = int(answer_instance)
-                    answers[key('household-relationships-answer', answer_instance, 0)] = v
+                    answers[ak('household-relationships-answer', answer_instance, 0)] = v
         else:
             answers = parse_answers(0)
 
         update_answers(answers)
         i = members_pages.index(page) + 1
-        return redirect('/household/introduction' if i >= len(members_pages) else '/members/' + members_pages[i])
+        return redirect('/household/introduction' if i >= len(members_pages) else '/members/{}'.format(members_pages[i]))
 
     storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
     answers = get_answers(session['user_id'], storage_key)
@@ -240,7 +212,7 @@ def handle_members(page):
     last_names = [v for (k, v) in answers.items() if k.startswith('last-name-')]
     members = [' '.join(n) for n in zip(first_names, middle_names, last_names)]
 
-    return render_template('members/' + page + '.html', members=members)
+    return render_template('members/{}.html'.format(page), members=members)
 
 
 @app.route('/household/<page>', methods=['GET', 'POST'])
@@ -249,16 +221,16 @@ def handle_household(page):
         answers = parse_answers(0)
         update_answers(answers)
         i = household_pages.index(page) + 1
-        return redirect('/member/0/introduction' if i >= len(household_pages) else '/household/' + household_pages[i])
+        return redirect('/member/0/introduction' if i >= len(household_pages) else '/household/{}'.format(household_pages[i]))
 
-    return render_template('household/' + page + '.html')
+    return render_template('household/{}.html'.format(page))
 
 
 @app.route('/member/<int:group_instance>/<page>', methods=['GET', 'POST'])
 def handle_member(group_instance, page):
     if request.method == 'POST':
         if page == 'date-of-birth':
-            answers = make_date('date-of-birth-answer', group_instance)
+            answers = parse_date('date-of-birth-answer', group_instance)
         else:
             answers = parse_answers(group_instance)
 
@@ -266,29 +238,29 @@ def handle_member(group_instance, page):
 
         if page == 'private-response':
             if request.form['private-response-answer'].startswith('Yes'):
-                return redirect('/member/' + str(group_instance) + '/request-private-response')
+                return redirect('/member/{}/request-private-response'.format(group_instance))
 
         if page == 'request-private-response':
-            return redirect('/member/' + str(group_instance) + '/completed')
+            return redirect('/member/{}/completed'.format(group_instance))
 
         i = member_pages.index(page) + 1
         if i < len(member_pages):
-            return redirect('/member/' + str(group_instance) + '/' + member_pages[i])
+            return redirect('/member/{}/{}'.format(group_instance, member_pages[i]))
 
         num_members = len([a for a in answers.keys() if a.startswith('first-name-')])
 
-        group_instance = int(group_instance) + 1
+        group_instance += 1
 
-        return redirect('/visitors_introduction' if group_instance >= num_members else '/member/' + str(group_instance) + '/introduction')
+        return redirect('/visitors_introduction' if group_instance >= num_members else '/member/{}/introduction'.format(group_instance))
 
     storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
     answers = get_answers(session['user_id'], storage_key)
 
-    first_name = answers[key('first-name', group_instance, 0)]
-    middle_names = answers[key('middle-names', group_instance, 0)]
-    last_name = answers[key('last-name', group_instance, 0)]
+    first_name = answers[ak('first-name', group_instance, 0)]
+    middle_names = answers[ak('middle-names', group_instance, 0)]
+    last_name = answers[ak('last-name', group_instance, 0)]
 
-    return render_template('member/' + page + '.html', first_name=first_name, middle_names=middle_names, last_name=last_name)
+    return render_template('member/{}.html'.format(page), first_name=first_name, middle_names=middle_names, last_name=last_name)
 
 
 @app.route('/visitors_introduction', methods=['GET', 'POST'])
@@ -305,7 +277,7 @@ def handle_visitors_introduction():
 def handle_visitor(group_instance, page):
     if request.method == 'POST':
         if page == 'date-of-birth':
-            answers = make_date('visitor-date-of-birth-answer', group_instance)
+            answers = parse_date('visitor-date-of-birth-answer', group_instance)
         else:
             answers = parse_answers(group_instance)
 
@@ -313,15 +285,15 @@ def handle_visitor(group_instance, page):
 
         i = visitor_pages.index(page) + 1
         if i < len(visitor_pages):
-            return redirect('/visitor/' + str(group_instance) + '/' + visitor_pages[i])
+            return redirect('/visitor/{}/{}'.format(group_instance, visitor_pages[i]))
 
-        num_visitors = answers[key('overnight-visitors-answer', 0, 0)]
+        num_visitors = answers[ak('overnight-visitors-answer', 0, 0)]
 
-        group_instance = int(group_instance) + 1
+        group_instance += 1
 
-        return redirect('/visitors_completed' if group_instance >= num_visitors else '/visitor/' + str(group_instance) + '/name')
+        return redirect('/visitors_completed' if group_instance >= num_visitors else '/visitor/{}/name'.format(group_instance))
 
-    return render_template('visitor/' + page + '.html', group_instance=group_instance)
+    return render_template('visitor/{}.html'.format(page), group_instance=group_instance)
 
 
 @app.route('/visitors_completed', methods=['GET', 'POST'])
@@ -347,37 +319,6 @@ def handle_completed():
 @app.route('/thank-you')
 def handle_thank_you():
     return render_template('thank-you.html')
-
-
-@app.route('/session')
-def create_session():
-    if session:
-        session.clear()
-
-    decrypted_token = decrypt(token=request.args.get('token'), key_store=key_store, key_purpose=KEY_PURPOSE_AUTHENTICATION, leeway=120)
-
-    # TODO validate JTI
-
-    claims = parse_runner_claims(decrypted_token)
-
-    user_id = id_generator.generate_id(claims)
-    user_ik = id_generator.generate_ik(claims)
-
-    session['user_id'] = user_id
-    session['user_ik'] = user_ik
-
-    return redirect('/introduction')
-
-
-@app.route('/fake_session')
-def create_fake_session():
-    if session:
-        session.clear()
-
-    session['user_id'] = str(uuid4())
-    session['user_ik'] = str(uuid4())
-
-    return redirect('/introduction')
 
 
 @app.route('/dump/submission')
@@ -421,6 +362,65 @@ def get_submission():
     }
 
     return json.dumps(submission)
+
+
+def encrypt_data(key, data):
+    jwe_token = jwe.JWE(plaintext=json.dumps(data), protected={'alg': 'dir', 'enc': 'A256GCM', 'kid': '1,1'})
+    jwe_token.add_recipient(key)
+    return jwe_token.serialize(compact=True)
+
+
+def decrypt_data(key, encrypted_token):
+    jwe_token = jwe.JWE(algs=['dir', 'A256GCM'])
+    jwe_token.deserialize(encrypted_token, key)
+    return json.loads(jwe_token.payload.decode())
+
+
+def get_answers(user_id, key):
+    table = dynamodb.Table(answers_table_name)
+    response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
+    item = response.get('Item')
+    return decrypt_data(key, item['answers']) if item else {}
+
+
+def put_answers(user_id, answers, key):
+    table = dynamodb.Table(answers_table_name)
+    response = table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})['ResponseMetadata']['HTTPStatusCode']
+    return response == 200
+
+
+def update_answers(new_answers):
+    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+    answers = get_answers(session['user_id'], storage_key)
+    answers.update(new_answers)
+    put_answers(session['user_id'], answers, storage_key)
+    return answers
+
+
+def ak(answer_id, answer_instance, group_instance):
+    return '{}-{}-{}'.format(answer_id, answer_instance, group_instance)
+
+
+def parse_date(answer_id, group_instance):
+    value = '{:04d}-{:02d}-{:02d}'.format(int(request.form[answer_id + '-year']), int(request.form[answer_id + '-month']), int(request.form[answer_id + '-day']))
+
+    return {ak(answer_id, 0, group_instance): value}
+
+
+def parse_answers(group_instance):
+    # TODO csrf
+
+    answers = {}
+    for k, v in request.form.items():
+        if k != 'csrf_token' and not k.startswith('action'):
+            if k in int_answers:
+                v = int(v) if v else None
+            elif k in list_answers:
+                v = request.form.getlist(k)
+
+            answers[ak(k, 0, group_instance)] = v
+
+    return answers
 
 
 if __name__ == '__main__':
