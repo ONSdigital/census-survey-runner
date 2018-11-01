@@ -21,6 +21,7 @@ from sdc.crypto.key_store import KeyStore, validate_required_keys
 from structlog import get_logger
 import redis
 
+from app import flask_theme_cache
 from app import settings
 from app.authentication.authenticator import login_manager
 from app.authentication.cookie_session import SHA256SecureCookieSessionInterface
@@ -146,6 +147,9 @@ def create_app(setting_overrides=None):  # noqa: C901  pylint: disable=too-compl
     # Add theme manager
     application.config['THEME_PATHS'] = os.path.dirname(os.path.abspath(__file__))
     Themes(application, app_identifier='surveyrunner')
+
+    # pylint: disable=maybe-no-member
+    application.jinja_env.globals['theme'] = flask_theme_cache.get_global_theme_template()
 
     @application.before_request
     def before_request():  # pylint: disable=unused-variable
