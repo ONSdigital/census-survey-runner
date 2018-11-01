@@ -1,6 +1,5 @@
 import os
 import ujson
-
 from uuid import uuid4
 
 import boto3
@@ -19,21 +18,37 @@ from app.keys import KEY_PURPOSE_AUTHENTICATION
 from app.storage.metadata_parser import parse_runner_claims
 from app.storage.storage_encryption import StorageEncryption
 
-app = Flask(__name__, template_folder='flat_templates')
+storage_backend = os.getenv('EQ_STORAGE_BACKEND')
+if storage_backend == 'gcs':
+    client = storage.Client()
+    gcs_bucket = client.get_bucket(os.getenv('EQ_GCS_BUCKET_ID'))
 
-EQ_STORAGE_BACKEND = os.getenv('EQ_STORAGE_BACKEND', 'dynamodb')
+    def get_answers(user_id, key):
+        try:
+            blob = gcs_bucket.blob('{}/{}'.format('flat', user_id))
+            return decrypt_data(key, blob.download_as_string().decode())
+        except NotFound:
+            return {}
 
-if EQ_STORAGE_BACKEND == 'dynamodb':
+    def put_answers(user_id, answers, key):
+        blob = gcs_bucket.blob('{}/{}'.format('flat', user_id))
+        blob.upload_from_string(encrypt_data(key, answers))
+else:
     dynamodb = boto3.resource('dynamodb', endpoint_url=os.getenv('EQ_DYNAMODB_ENDPOINT'), config=Config(
         retries={'max_attempts': int(os.getenv('EQ_DYNAMODB_MAX_RETRIES', '5'))},
         max_pool_connections=int(os.getenv('EQ_DYNAMODB_MAX_POOL_CONNECTIONS', '30')),
     ))
     dynamodb_table_name = os.getenv('EQ_QUESTIONNAIRE_STATE_TABLE_NAME', 'dev-questionnaire-state')
-elif EQ_STORAGE_BACKEND == 'gcs':
-    client = storage.Client()
-    gcs_bucket = client.get_bucket(os.getenv('EQ_GCS_BUCKET_ID'))
-else:
-    raise Exception('Unknown storage backend {}'.format(EQ_STORAGE_BACKEND))
+
+    def get_answers(user_id, key):
+        table = dynamodb.Table(dynamodb_table_name)
+        response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
+        item = response.get('Item')
+        return decrypt_data(key, item['answers']) if item else {}
+
+    def put_answers(user_id, answers, key):
+        table = dynamodb.Table(dynamodb_table_name)
+        table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})
 
 with open(os.getenv('EQ_KEYS_FILE', 'keys.yml')) as f:
     key_store = KeyStore(yaml.safe_load(f))
@@ -41,11 +56,12 @@ with open(os.getenv('EQ_KEYS_FILE', 'keys.yml')) as f:
 with open(os.getenv('EQ_SECRETS_FILE', 'secrets.yml')) as secrets_file:
     secrets = yaml.safe_load(secrets_file)['secrets']
 
+app = Flask(__name__, template_folder='flat_templates')
 app.secret_key = secrets['EQ_SECRET_KEY']
 
-pepper = secrets['EQ_SERVER_SIDE_STORAGE_ENCRYPTION_USER_PEPPER']
-
 id_generator = UserIDGenerator(10000, secrets['EQ_SERVER_SIDE_STORAGE_USER_ID_SALT'], secrets['EQ_SERVER_SIDE_STORAGE_USER_IK_SALT'])
+
+PEPPER = secrets['EQ_SERVER_SIDE_STORAGE_ENCRYPTION_USER_PEPPER']
 
 INT_ANSWERS = {
     'overnight-visitors-answer',
@@ -211,7 +227,7 @@ def handle_members(page):
         i = MEMBERS_PAGES.index(page) + 1
         return redirect('/household/introduction' if i >= len(MEMBERS_PAGES) else '/members/{}'.format(MEMBERS_PAGES[i]))
 
-    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], PEPPER)
     answers = get_answers(session['user_id'], storage_key)
 
     first_names = [v for (k, v) in answers.items() if k.startswith('first-name-')]
@@ -262,7 +278,7 @@ def handle_member(group_instance, page):
 
         return redirect('/visitors_introduction' if group_instance >= num_members else '/member/{}/introduction'.format(group_instance))
 
-    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], PEPPER)
     answers = get_answers(session['user_id'], storage_key)
 
     first_name = answers[ak('first-name', group_instance, 0)]
@@ -332,7 +348,7 @@ def handle_thank_you():
 
 @app.route('/dump/submission')
 def get_submission():
-    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], PEPPER)
     answers = get_answers(session['user_id'], storage_key)
 
     flat_answers = []
@@ -385,31 +401,8 @@ def decrypt_data(key, encrypted_token):
     return ujson.loads(jwe_token.payload.decode())
 
 
-def get_answers(user_id, key):
-    if EQ_STORAGE_BACKEND == 'dynamodb':
-        table = dynamodb.Table(dynamodb_table_name)
-        response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
-        item = response.get('Item')
-        return decrypt_data(key, item['answers']) if item else {}
-    elif EQ_STORAGE_BACKEND == 'gcs':
-        blob = gcs_bucket.blob('{}/{}'.format('flat', user_id))
-        try:
-            return decrypt_data(key, blob.download_as_string().decode())
-        except NotFound:
-            return {}
-
-
-def put_answers(user_id, answers, key):
-    if EQ_STORAGE_BACKEND == 'dynamodb':
-        table = dynamodb.Table(dynamodb_table_name)
-        table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})
-    elif EQ_STORAGE_BACKEND == 'gcs':
-        blob = gcs_bucket.blob('{}/{}'.format('flat', user_id))
-        blob.upload_from_string(encrypt_data(key, answers))
-
-
 def update_answers(new_answers):
-    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], PEPPER)
     answers = get_answers(session['user_id'], storage_key)
     answers.update(new_answers)
     put_answers(session['user_id'], answers, storage_key)
