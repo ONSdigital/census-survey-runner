@@ -94,14 +94,6 @@ def get_answers(user_id, key):
     return decrypt_data(key, item['answers']) if item else {}
 
 
-def json_safe_answer(a):
-    if isinstance(a['value'], Decimal):
-        a['value'] = int(a['value'])
-    a['group_instance'] = int(a['group_instance'])
-    a['answer_instance'] = int(a['answer_instance'])
-    return a
-
-
 def handle_post(group_instance, new_answers=None):
     # TODO csrf
 
@@ -228,8 +220,12 @@ def handle_members(page):
                     answer_instance = int(answer_instance)
                     answers[key(k, answer_instance, 0)] = v
         if page == 'household-relationships':
-            # TODO decode whole matrix
-            answers = {key('household-relationships-answer', 0, 0):  request.form['household-relationships-answer-0']}
+            answers = {}
+            for k, v in request.form.items():
+                if k.startswith('household-relationships-answer-'):
+                    _, answer_instance = k.rsplit('-', 1)
+                    answer_instance = int(answer_instance)
+                    answers[key('household-relationships-answer', answer_instance, 0)] = v
 
         handle_post(0, new_answers=answers)
         i = members_pages.index(page) + 1
@@ -278,9 +274,10 @@ def handle_member(group_instance, page):
     answers = get_answers(session['user_id'], storage_key)
 
     first_name = answers[key('first-name', group_instance, 0)]
+    middle_name = answers.get(key('middle-name', group_instance, 0), '')
     last_name = answers[key('last-name', group_instance, 0)]
 
-    return render_template('member/' + page + '.html', first_name=first_name, last_name=last_name)
+    return render_template('member/' + page + '.html', first_name=first_name, middle_name=middle_name, last_name=last_name)
 
 
 @app.route('/visitors_introduction', methods=['GET', 'POST'])
@@ -380,8 +377,6 @@ def get_submission():
         answer_id, answer_instance, group_instance = k.rsplit('-', 2)
         answer_instance = int(answer_instance)
         group_instance = int(group_instance)
-        if isinstance(v, Decimal):
-            v = int(v)
         flat_answers.append({'answer_id': answer_id, 'answer_instance': answer_instance, 'group_instance': group_instance, 'value': v})
 
     # TODO populate submission data properly
