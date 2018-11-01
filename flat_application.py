@@ -1,8 +1,6 @@
 import json
 import os
-from decimal import Decimal
 
-from os import listdir
 from uuid import uuid4
 
 import boto3
@@ -57,65 +55,6 @@ list_answers = {
     'employment-type-answer',
     'occupation-answer'
 }
-
-
-def key(answer_id, answer_instance, group_instance):
-    return answer_id + '-' + str(answer_instance) + '-' + str(group_instance)
-
-
-def make_date(answer_id, group_instance):
-    value = '{:04d}-{:02d}-{:02d}'.format(int(request.form[answer_id + '-year']), int(request.form[answer_id + '-month']), int(request.form[answer_id + '-day']))
-
-    return {key(answer_id, 0, group_instance): value}
-
-
-def encrypt_data(key, data):
-    jwe_token = jwe.JWE(plaintext=json.dumps(data), protected={'alg': 'dir', 'enc': 'A256GCM', 'kid': '1,1'})
-    jwe_token.add_recipient(key)
-    return jwe_token.serialize(compact=True)
-
-
-def decrypt_data(key, encrypted_token):
-    jwe_token = jwe.JWE(algs=['dir', 'A256GCM'])
-    jwe_token.deserialize(encrypted_token, key)
-    return json.loads(jwe_token.payload.decode())
-
-
-def put_answers(user_id, answers, key):
-    table = dynamodb.Table(answers_table_name)
-    response = table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})['ResponseMetadata']['HTTPStatusCode']
-    return response == 200
-
-
-def get_answers(user_id, key):
-    table = dynamodb.Table(answers_table_name)
-    response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
-    item = response.get('Item')
-    return decrypt_data(key, item['answers']) if item else {}
-
-
-def handle_post(group_instance, new_answers=None):
-    # TODO csrf
-
-    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
-    answers = get_answers(session['user_id'], storage_key)
-
-    if new_answers is not None:
-        answers.update(new_answers)
-    else:
-        for k, v in request.form.items():
-            if k != 'csrf_token' and not k.startswith('action'):
-                if k in int_answers:
-                    v = int(v) if v else None
-                elif k in list_answers:
-                    v = request.form.getlist(k)
-
-                answers[key(k, 0, group_instance)] = v
-
-    put_answers(session['user_id'], answers, storage_key)
-
-    return answers
-
 
 members_pages = [
     'introduction',
@@ -190,10 +129,70 @@ visitor_pages = [
 ]
 
 
+def key(answer_id, answer_instance, group_instance):
+    return answer_id + '-' + str(answer_instance) + '-' + str(group_instance)
+
+
+def make_date(answer_id, group_instance):
+    value = '{:04d}-{:02d}-{:02d}'.format(int(request.form[answer_id + '-year']), int(request.form[answer_id + '-month']), int(request.form[answer_id + '-day']))
+
+    return {key(answer_id, 0, group_instance): value}
+
+
+def encrypt_data(key, data):
+    jwe_token = jwe.JWE(plaintext=json.dumps(data), protected={'alg': 'dir', 'enc': 'A256GCM', 'kid': '1,1'})
+    jwe_token.add_recipient(key)
+    return jwe_token.serialize(compact=True)
+
+
+def decrypt_data(key, encrypted_token):
+    jwe_token = jwe.JWE(algs=['dir', 'A256GCM'])
+    jwe_token.deserialize(encrypted_token, key)
+    return json.loads(jwe_token.payload.decode())
+
+
+def get_answers(user_id, key):
+    table = dynamodb.Table(answers_table_name)
+    response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
+    item = response.get('Item')
+    return decrypt_data(key, item['answers']) if item else {}
+
+
+def put_answers(user_id, answers, key):
+    table = dynamodb.Table(answers_table_name)
+    response = table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})['ResponseMetadata']['HTTPStatusCode']
+    return response == 200
+
+
+def update_answers(new_answers):
+    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
+    answers = get_answers(session['user_id'], storage_key)
+    answers.update(new_answers)
+    put_answers(session['user_id'], answers, storage_key)
+    return answers
+
+
+def parse_answers(group_instance):
+    # TODO csrf
+
+    answers = {}
+    for k, v in request.form.items():
+        if k != 'csrf_token' and not k.startswith('action'):
+            if k in int_answers:
+                v = int(v) if v else None
+            elif k in list_answers:
+                v = request.form.getlist(k)
+
+            answers[key(k, 0, group_instance)] = v
+
+    return answers
+
+
 @app.route('/introduction', methods=['GET', 'POST'])
 def handle_introduction():
     if request.method == 'POST':
-        handle_post(0)
+        answers = parse_answers(0)
+        update_answers(answers)
         return redirect('/address')
 
     return render_template('introduction.html')
@@ -202,7 +201,8 @@ def handle_introduction():
 @app.route('/address', methods=['GET', 'POST'])
 def handle_address():
     if request.method == 'POST':
-        handle_post(0)
+        answers = parse_answers(0)
+        update_answers(answers)
         return redirect('/members/introduction')
 
     return render_template('address.html')
@@ -211,7 +211,6 @@ def handle_address():
 @app.route('/members/<page>', methods=['GET', 'POST'])
 def handle_members(page):
     if request.method == 'POST':
-        answers = None
         if page == 'household-composition':
             answers = {}
             for k, v in request.form.items():
@@ -219,15 +218,17 @@ def handle_members(page):
                     _, answer_instance, k = k.split('-', 2)
                     answer_instance = int(answer_instance)
                     answers[key(k, answer_instance, 0)] = v
-        if page == 'household-relationships':
+        elif page == 'household-relationships':
             answers = {}
             for k, v in request.form.items():
                 if k.startswith('household-relationships-answer-'):
                     _, answer_instance = k.rsplit('-', 1)
                     answer_instance = int(answer_instance)
                     answers[key('household-relationships-answer', answer_instance, 0)] = v
+        else:
+            answers = parse_answers(0)
 
-        handle_post(0, new_answers=answers)
+        update_answers(answers)
         i = members_pages.index(page) + 1
         return redirect('/household/introduction' if i >= len(members_pages) else '/members/' + members_pages[i])
 
@@ -245,7 +246,8 @@ def handle_members(page):
 @app.route('/household/<page>', methods=['GET', 'POST'])
 def handle_household(page):
     if request.method == 'POST':
-        handle_post(0)
+        answers = parse_answers(0)
+        update_answers(answers)
         i = household_pages.index(page) + 1
         return redirect('/member/0/introduction' if i >= len(household_pages) else '/household/' + household_pages[i])
 
@@ -255,11 +257,12 @@ def handle_household(page):
 @app.route('/member/<int:group_instance>/<page>', methods=['GET', 'POST'])
 def handle_member(group_instance, page):
     if request.method == 'POST':
-        answers = None
         if page == 'date-of-birth':
             answers = make_date('date-of-birth-answer', group_instance)
+        else:
+            answers = parse_answers(group_instance)
 
-        answers = handle_post(group_instance, new_answers=answers)
+        answers = update_answers(answers)
 
         if page == 'private-response':
             if request.form['private-response-answer'].startswith('Yes'):
@@ -291,7 +294,8 @@ def handle_member(group_instance, page):
 @app.route('/visitors_introduction', methods=['GET', 'POST'])
 def handle_visitors_introduction():
     if request.method == 'POST':
-        handle_post(0)
+        answers = parse_answers(0)
+        update_answers(answers)
         return redirect('/visitor/0/name')
 
     return render_template('visitors_introduction.html')
@@ -300,11 +304,12 @@ def handle_visitors_introduction():
 @app.route('/visitor/<int:group_instance>/<page>', methods=['GET', 'POST'])
 def handle_visitor(group_instance, page):
     if request.method == 'POST':
-        answers = None
         if page == 'date-of-birth':
             answers = make_date('visitor-date-of-birth-answer', group_instance)
+        else:
+            answers = parse_answers(group_instance)
 
-        answers = handle_post(group_instance, new_answers=answers)
+        answers = update_answers(answers)
 
         i = visitor_pages.index(page) + 1
         if i < len(visitor_pages):
@@ -322,7 +327,8 @@ def handle_visitor(group_instance, page):
 @app.route('/visitors_completed', methods=['GET', 'POST'])
 def handle_visitors_completed():
     if request.method == 'POST':
-        handle_post(0)
+        answers = parse_answers(0)
+        update_answers(answers)
         return redirect('/completed')
 
     return render_template('visitors_completed.html')
