@@ -9,6 +9,7 @@ from sdc.crypto.key_store import KeyStore
 from tests.app.app_context_test_case import setup_tables
 from tests.integration.create_token import TokenGenerator
 
+from app import flask_theme_cache
 from app.keys import KEY_PURPOSE_AUTHENTICATION, KEY_PURPOSE_SUBMISSION
 from app.setup import create_app
 
@@ -92,6 +93,8 @@ class IntegrationTestCase(unittest.TestCase):  # pylint: disable=too-many-public
 
     def tearDown(self):
         self._ddb.stop()
+
+        flask_theme_cache.clear()
 
     def launchSurvey(self, eq_id='test', form_type_id='dates', **payload_kwargs):
         """
