@@ -212,7 +212,9 @@ def handle_members(page):
     last_names = [v for (k, v) in answers.items() if k.startswith('last-name-')]
     members = [' '.join(n) for n in zip(first_names, middle_names, last_names)]
 
-    return render_template('members/{}.html'.format(page), members=members)
+    address_line_1 = answers[ak('address-line-1', 0, 0)]
+
+    return render_template('members/{}.html'.format(page), members=members, address_line_1=address_line_1)
 
 
 @app.route('/household/<page>', methods=['GET', 'POST'])
