@@ -59,9 +59,14 @@ list_answers = {
 }
 
 
-def make_date(key, group_instance):
-    value = '{:04d}-{:02d}-{:02d}'.format(int(request.form[key + '-year']), int(request.form[key + '-month']), int(request.form[key + '-day']))
-    return {'answer_id': key, 'answer_instance': 0, 'group_instance': group_instance, 'value': value}
+def key(answer_id, answer_instance, group_instance):
+    return answer_id + '-' + str(answer_instance) + '-' + str(group_instance)
+
+
+def make_date(answer_id, group_instance):
+    value = '{:04d}-{:02d}-{:02d}'.format(int(request.form[answer_id + '-year']), int(request.form[answer_id + '-month']), int(request.form[answer_id + '-day']))
+
+    return {key(answer_id, 0, group_instance): value}
 
 
 def encrypt_data(key, data):
@@ -86,7 +91,7 @@ def get_answers(user_id, key):
     table = dynamodb.Table(answers_table_name)
     response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
     item = response.get('Item')
-    return decrypt_data(key, item['answers']) if item else []
+    return decrypt_data(key, item['answers']) if item else {}
 
 
 def json_safe_answer(a):
@@ -103,10 +108,8 @@ def handle_post(group_instance, new_answers=None):
     storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
     answers = get_answers(session['user_id'], storage_key)
 
-    # TODO overwrite answers, unique based on answer_id, answer_instance, group_id
-
     if new_answers is not None:
-        answers += new_answers
+        answers.update(new_answers)
     else:
         for k, v in request.form.items():
             if k != 'csrf_token' and not k.startswith('action'):
@@ -115,7 +118,7 @@ def handle_post(group_instance, new_answers=None):
                 elif k in list_answers:
                     v = request.form.getlist(k)
 
-                answers.append({'answer_id': k, 'answer_instance': 0, 'group_instance': group_instance, 'value': v})
+                answers[key(k, 0, group_instance)] = v
 
     put_answers(session['user_id'], answers, storage_key)
 
@@ -218,14 +221,15 @@ def handle_members(page):
     if request.method == 'POST':
         answers = None
         if page == 'household-composition':
-            answers = []
+            answers = {}
             for k, v in request.form.items():
                 if k.startswith('household-'):
                     _, answer_instance, k = k.split('-', 2)
                     answer_instance = int(answer_instance)
-                    answers.append({'answer_id': k, 'answer_instance': answer_instance, 'group_instance': 0,'value': v})
+                    answers[key(k, answer_instance, 0)] = v
         if page == 'household-relationships':
-            answers = [{'answer_id': 'household-relationships-answer', 'answer_instance': 0, 'group_instance': 0, 'value': request.form['household-relationships-answer-0']}]
+            # TODO decode whole matrix
+            answers = {key('household-relationships-answer', 0, 0):  request.form['household-relationships-answer-0']}
 
         handle_post(0, new_answers=answers)
         i = members_pages.index(page) + 1
@@ -249,7 +253,7 @@ def handle_member(group_instance, page):
     if request.method == 'POST':
         answers = None
         if page == 'date-of-birth':
-            answers = [make_date('date-of-birth-answer', group_instance)]
+            answers = make_date('date-of-birth-answer', group_instance)
 
         answers = handle_post(group_instance, new_answers=answers)
 
@@ -264,7 +268,7 @@ def handle_member(group_instance, page):
         if i < len(member_pages):
             return redirect('/member/' + str(group_instance) + '/' + member_pages[i])
 
-        num_members = len([a for a in answers if a['answer_id'] == 'first-name'])
+        num_members = len([a for a in answers.keys() if a.startswith('first-name')])
 
         group_instance = int(group_instance) + 1
 
@@ -272,8 +276,9 @@ def handle_member(group_instance, page):
 
     storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
     answers = get_answers(session['user_id'], storage_key)
-    first_name = next(a for a in answers if a['answer_id'] == 'first-name' and a['answer_instance'] == group_instance)['value']
-    last_name = next(a for a in answers if a['answer_id'] == 'last-name' and a['answer_instance'] == group_instance)['value']
+
+    first_name = answers[key('first-name', group_instance, 0)]
+    last_name = answers[key('last-name', group_instance, 0)]
 
     return render_template('member/' + page + '.html', first_name=first_name, last_name=last_name)
 
@@ -292,7 +297,7 @@ def handle_visitor(group_instance, page):
     if request.method == 'POST':
         answers = None
         if page == 'date-of-birth':
-            answers = [make_date('visitor-date-of-birth-answer', group_instance)]
+            answers = make_date('visitor-date-of-birth-answer', group_instance)
 
         answers = handle_post(group_instance, new_answers=answers)
 
@@ -300,7 +305,7 @@ def handle_visitor(group_instance, page):
         if i < len(visitor_pages):
             return redirect('/visitor/' + str(group_instance) + '/' + visitor_pages[i])
 
-        num_visitors = next(a for a in answers if a['answer_id'] == 'overnight-visitors-answer')['value']
+        num_visitors = answers[key('overnight-visitors-answer', 0, 0)]
 
         group_instance = int(group_instance) + 1
 
@@ -368,7 +373,16 @@ def create_fake_session():
 def get_submission():
     storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], pepper)
     answers = get_answers(session['user_id'], storage_key)
-    answers = [json_safe_answer(a) for a in answers]
+
+    flat_answers = []
+
+    for k, v in answers.items():
+        answer_id, answer_instance, group_instance = k.rsplit('-', 2)
+        answer_instance = int(answer_instance)
+        group_instance = int(group_instance)
+        if isinstance(v, Decimal):
+            v = int(v)
+        flat_answers.append({'answer_id': answer_id, 'answer_instance': answer_instance, 'group_instance': group_instance, 'value': v})
 
     # TODO populate submission data properly
     submission = {
@@ -379,7 +393,7 @@ def get_submission():
                 'instrument_id': 'household',
                 'period': '201604'
             },
-            'data': answers,
+            'data': flat_answers,
             'flushed': False,
             'metadata': {
                 'ref_period_end_date': '2016-04-30',
