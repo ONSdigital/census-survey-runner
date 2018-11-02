@@ -1,3 +1,9 @@
+import logging;logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
+import newrelic.agent; newrelic.agent.initialize()
+
 import os
 import ujson
 from uuid import uuid4
@@ -387,6 +393,11 @@ def get_submission():
     }
 
     return ujson.dumps(submission)
+
+
+@app.route('/status')
+def handle_status():
+    return 'ok'
 
 
 def encrypt_data(key, data):
