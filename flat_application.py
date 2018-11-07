@@ -1,3 +1,5 @@
+import requests
+from google.auth.transport.requests import AuthorizedSession, Request
 import logging;logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
     level=logging.INFO,
@@ -10,6 +12,7 @@ from uuid import uuid4
 
 import boto3
 import yaml
+import google.auth
 from botocore.config import Config
 from flask import Flask, render_template, request, session
 from google.cloud import storage
@@ -26,7 +29,21 @@ from app.storage.storage_encryption import StorageEncryption
 
 storage_backend = os.getenv('EQ_STORAGE_BACKEND')
 if storage_backend == 'gcs':
-    client = storage.Client()
+    class MyAuthorizedSession(AuthorizedSession):
+        def __init__(self, credentials, max_pool_connections=10, **kwargs):
+            super(MyAuthorizedSession, self).__init__(credentials, **kwargs)
+
+            auth_request_session = requests.Session()
+
+            retry_adapter = requests.adapters.HTTPAdapter(max_retries=3, pool_maxsize=max_pool_connections)
+            auth_request_session.mount("https://", retry_adapter)
+
+            self._auth_request = Request(auth_request_session)
+
+    client = storage.Client(_http=MyAuthorizedSession(
+        google.auth.default()[0],
+        max_pool_connections=int(os.getenv('EQ_GCS_MAX_POOL_CONNECTIONS', '30'))
+    ))
     gcs_bucket = client.get_bucket(os.getenv('EQ_GCS_BUCKET_ID'))
 
     def get_answers(user_id, key):
@@ -340,7 +357,7 @@ def handle_visitors_completed():
 @app.route('/completed', methods=['GET', 'POST'])
 def handle_completed():
     if request.method == 'POST':
-        print('Submitting', get_submission())
+        print('Submitting', get_submission()[:100])
         # TODO validate and submit answers
         return redirect('/thank-you')
 
