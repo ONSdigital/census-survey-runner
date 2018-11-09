@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/introduction" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -115,10 +116,10 @@
 
       
 
-  <h1 class="saturn">{{ first_name }} {{ last_name }}</h1>
+  <h1 class="saturn">{{ .FirstName }} {{ .LastName }}</h1>
 
 
-  <p class="mars">In this section, we’re going to ask you questions about <em>{{ first_name }} {{ last_name }}</em>.</p>
+  <p class="mars">In this section, we’re going to ask you questions about <em>{{ .FirstName }} {{ .LastName }}</em>.</p>
 
 
 <h3 class="neptune">Information you need</h3>
@@ -158,4 +159,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/employment-type" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,7 +162,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      Which of the following best describes what <em>{{ first_name }} {{ last_name }}</em> was doing last week?
+      Which of the following best describes what <em>{{ .FirstName }} {{ .LastName }}</em> was doing last week?
     </h1>
       
 
@@ -198,7 +199,7 @@
   <fieldset>
     
   <legend class="field__legend mars u-vh">
-    Which of the following best describes what <em>{{ first_name }} {{ last_name }}</em> was doing last week?</legend>
+    Which of the following best describes what <em>{{ .FirstName }} {{ .LastName }}</em> was doing last week?</legend>
 
   
     <div class="field__label mars">Select all that apply:</div>
@@ -442,4 +443,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

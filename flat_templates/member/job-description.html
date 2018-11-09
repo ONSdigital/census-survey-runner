@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/job-description" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,7 +162,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      What <em>{{ first_name }} {{ last_name }}</em> does in their main job?
+      What <em>{{ .FirstName }} {{ .LastName }}</em> does in their main job?
     </h1>
       
 
@@ -257,4 +258,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

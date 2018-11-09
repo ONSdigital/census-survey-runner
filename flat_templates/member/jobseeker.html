@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/jobseeker" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,7 +162,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      Was <em>{{ first_name }} {{ last_name }}</em> actively looking for any kind of paid work during the last four weeks?
+      Was <em>{{ .FirstName }} {{ .LastName }}</em> actively looking for any kind of paid work during the last four weeks?
     </h1>
       
 
@@ -188,7 +189,7 @@
   <fieldset>
     
   <legend class="field__legend mars u-vh">
-    Was <em>{{ first_name }} {{ last_name }}</em> actively looking for any kind of paid work during the last four weeks?</legend>
+    Was <em>{{ .FirstName }} {{ .LastName }}</em> actively looking for any kind of paid work during the last four weeks?</legend>
 
   
 
@@ -300,4 +301,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

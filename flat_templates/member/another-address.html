@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/another-address" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,12 +162,12 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      Does <em>{{ first_name }} {{ last_name }}</em> stay at another address for more than 30 days a year?
+      Does <em>{{ .FirstName }} {{ .LastName }}</em> stay at another address for more than 30 days a year?
     </h1>
 
       <fieldset class="question__fieldset js-question-fieldset">
 
-        <legend class="u-vh">Does {{ first_name }} {{ last_name }} stay at another address for more than 30 days a year?</legend>
+        <legend class="u-vh">Does {{ .FirstName }} {{ .LastName }} stay at another address for more than 30 days a year?</legend>
 
         
 
@@ -207,7 +208,7 @@
   <fieldset>
     
   <legend class="field__legend mars u-vh">
-    Does <em>{{ first_name }} {{ last_name }}</em> stay at another address for more than 30 days a year?</legend>
+    Does <em>{{ .FirstName }} {{ .LastName }}</em> stay at another address for more than 30 days a year?</legend>
 
   
 
@@ -359,4 +360,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

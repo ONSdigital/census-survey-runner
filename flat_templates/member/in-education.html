@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/in-education" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,7 +162,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      Is <em>{{ first_name }} {{ last_name }}</em> in full-time education?
+      Is <em>{{ .FirstName }} {{ .LastName }}</em> in full-time education?
     </h1>
       
 
@@ -188,7 +189,7 @@
   <fieldset>
     
   <legend class="field__legend mars u-vh">
-    Is <em>{{ first_name }} {{ last_name }}</em> in full-time education?</legend>
+    Is <em>{{ .FirstName }} {{ .LastName }}</em> in full-time education?</legend>
 
   
 
@@ -300,4 +301,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

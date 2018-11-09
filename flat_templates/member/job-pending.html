@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/job-pending" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,7 +162,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      Last week, was <em>{{ first_name }} {{ last_name }}</em> waiting to start a job already accepted?
+      Last week, was <em>{{ .FirstName }} {{ .LastName }}</em> waiting to start a job already accepted?
     </h1>
       
 
@@ -188,7 +189,7 @@
   <fieldset>
     
   <legend class="field__legend mars u-vh">
-    Last week, was <em>{{ first_name }} {{ last_name }}</em> waiting to start a job already accepted?</legend>
+    Last week, was <em>{{ .FirstName }} {{ .LastName }}</em> waiting to start a job already accepted?</legend>
 
   
 
@@ -300,4 +301,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

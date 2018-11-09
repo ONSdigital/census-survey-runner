@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/ever-worked" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,7 +162,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      Has <em>{{ first_name }} {{ last_name }}</em> ever worked?
+      Has <em>{{ .FirstName }} {{ .LastName }}</em> ever worked?
     </h1>
       
 
@@ -202,7 +203,7 @@
   <fieldset>
     
   <legend class="field__legend mars u-vh">
-    Has <em>{{ first_name }} {{ last_name }}</em> ever worked?</legend>
+    Has <em>{{ .FirstName }} {{ .LastName }}</em> ever worked?</legend>
 
   
 
@@ -314,4 +315,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

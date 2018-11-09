@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "members/overnight-visitors" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -155,7 +156,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      How many visitors are staying overnight at <em>{{ address_line_1 }}</em> on 9th April 2017?
+      How many visitors are staying overnight at <em>{{ .AddressLine1 }}</em> on 9th April 2017?
     </h1>
       
 
@@ -263,4 +264,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

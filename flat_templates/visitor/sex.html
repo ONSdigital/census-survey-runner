@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "visitor/sex" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -300,4 +301,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

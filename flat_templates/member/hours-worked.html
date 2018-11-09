@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/hours-worked" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,7 +162,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      In <em>{{ first_name }} {{ last_name }}’s</em> main job, how many hours a week do they usually work?
+      In <em>{{ .FirstName }} {{ .LastName }}’s</em> main job, how many hours a week do they usually work?
     </h1>
       
 
@@ -198,7 +199,7 @@
   <fieldset>
     
   <legend class="field__legend mars u-vh">
-    In <em>{{ first_name }} {{ last_name }}’s</em> main job, how many hours a week do they usually work?</legend>
+    In <em>{{ .FirstName }} {{ .LastName }}’s</em> main job, how many hours a week do they usually work?</legend>
 
   
 
@@ -362,4 +363,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

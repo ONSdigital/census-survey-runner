@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/business-name" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,7 +162,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      What is the name of the organisation of business that <em>{{ first_name }} {{ last_name }}</em> work for?
+      What is the name of the organisation of business that <em>{{ .FirstName }} {{ .LastName }}</em> work for?
     </h1>
       <div class="question__description mars" id="description-business-name-question">
       <p>If you were self-employed in your own organisation or business, enter the name</p><p>This question is asking for the name of the organisation or business that you work (or worked) for in your main job.</p><p>If you can’t remember the name of the organisation, please give the best information you can.</p><p>If you are employed through an agency please enter the name of the business you are working for, not the agency.</p>
@@ -256,4 +257,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

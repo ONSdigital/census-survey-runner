@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "visitor/name" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -156,12 +157,12 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      What is the name of visitor {{ group_instance + 1 }}?
+      What is the name of visitor {{ .VisitorNumber }}?
     </h1>
 
       <fieldset class="question__fieldset js-question-fieldset">
 
-        <legend class="u-vh">What is the name of visitor {{ group_instance + 1 }}?</legend>
+        <legend class="u-vh">What is the name of visitor {{ .VisitorNumber }}?</legend>
 
         
 
@@ -289,4 +290,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

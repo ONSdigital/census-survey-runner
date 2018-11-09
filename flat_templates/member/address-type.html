@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/address-type" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -449,4 +450,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

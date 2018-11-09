@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/disability" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,7 +162,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      Are <em>{{ first_name }} {{ last_name }}’s</em> day-to-day activities limited because of a health problem or disability which has lasted, or is expected to last, at least 12 months?
+      Are <em>{{ .FirstName }} {{ .LastName }}’s</em> day-to-day activities limited because of a health problem or disability which has lasted, or is expected to last, at least 12 months?
     </h1>
       
 
@@ -198,7 +199,7 @@
   <fieldset>
     
   <legend class="field__legend mars u-vh">
-    Are <em>{{ first_name }} {{ last_name }}’s</em> day-to-day activities limited because of a health problem or disability which has lasted, or is expected to last, at least 12 months?</legend>
+    Are <em>{{ .FirstName }} {{ .LastName }}’s</em> day-to-day activities limited because of a health problem or disability which has lasted, or is expected to last, at least 12 months?</legend>
 
   
 
@@ -336,4 +337,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

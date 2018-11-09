@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/details-correct" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -161,7 +162,7 @@
     
 
       <h1 class="question__title saturn" data-qa="question-title">
-      Is the name {{ first_name }} {{ middle_names }} {{ last_name }} correct, including any middle name(s)?
+      Is the name {{ .FirstName }} {{ .MiddleNames }} {{ .LastName }} correct, including any middle name(s)?
     </h1>
       
 
@@ -300,4 +301,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}

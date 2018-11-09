@@ -1,4 +1,5 @@
-{% include 'partials/header.html' %}
+{{define "member/completed" }}
+{{ template "header" }}
 
         <div class="page__subheader">
           <div class="container">
@@ -120,7 +121,7 @@
 
       
 
-  <h1 class="saturn">There are no more questions for {{ first_name }} {{ last_name }}</h1>
+  <h1 class="saturn">There are no more questions for {{ .FirstName }} {{ .LastName }}</h1>
 
 
 
@@ -156,4 +157,5 @@
         </div>
       </div>
 
-{% include 'partials/footer.html' %}
+{{ template "footer" }}
+{{ end }}
