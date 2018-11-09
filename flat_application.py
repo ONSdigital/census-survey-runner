@@ -44,7 +44,7 @@ if storage_backend == 'gcs':
     def put_answers(user_id, answers, key):
         blob = gcs_bucket.blob('{}/{}'.format('flat', user_id))
         blob.upload_from_string(encrypt_data(key, answers))
-else:
+elif storage_backend == 'dynamodb':
     dynamodb = boto3.resource('dynamodb', endpoint_url=os.getenv('EQ_DYNAMODB_ENDPOINT'), config=Config(
         retries={'max_attempts': int(os.getenv('EQ_DYNAMODB_MAX_RETRIES', '5'))},
         max_pool_connections=int(os.getenv('EQ_DYNAMODB_MAX_POOL_CONNECTIONS', '30')),
@@ -60,6 +60,14 @@ else:
     def put_answers(user_id, answers, key):
         table = dynamodb.Table(dynamodb_table_name)
         table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})
+else:
+    storage = {}
+
+    def get_answers(user_id, key):
+        return decrypt_data(key, storage[user_id]) if user_id in storage else {}
+
+    def put_answers(user_id, answers, key):
+        storage[user_id] = encrypt_data(key, answers)
 
 with open(os.getenv('EQ_KEYS_FILE', 'keys.yml')) as f:
     key_store = KeyStore(yaml.safe_load(f))
