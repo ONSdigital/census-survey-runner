@@ -28,6 +28,8 @@ type VisitorData struct {
 
 var pages = ParseTemplates()
 
+var storage = map[string]map[string]string{}
+
 var MEMBERS_PAGES = []string{
     "introduction",
     "permanent-or-family-home",
@@ -108,7 +110,8 @@ func handle_session(w http.ResponseWriter, r *http.Request) {
 
 func handle_introduction(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
-        // TODO save answers
+        answers := parse_answers(r, 0)
+        update_answers(answers)
         redirect(w, r, "/address")
         return
     }
@@ -304,6 +307,49 @@ func redirect(w http.ResponseWriter, r *http.Request, path string) {
     http.Redirect(w, r, "http://" + r.Host + path, http.StatusFound)
 }
 
+func get_answers(user_id string, key string) map[string]string {
+    if val, ok := storage[user_id]; ok {
+        return val // TODO decrypt
+    }
+    return map[string]string{}
+}
+
+func put_answers(user_id string, answers map[string]string, key string) {
+    storage[user_id] = answers // TODO encrypt
+}
+
+func update_answers(new_answers map[string]string) map[string]string {
+    storage_key := "mykey" // TODO
+    answers := get_answers("myuserid", storage_key) // TODO get user from cookie
+
+    for k, v := range new_answers {
+        answers[k] = v
+    }
+
+    put_answers("myuserid", answers, storage_key)
+    return answers
+}
+
+
+func ak(answer_id string, answer_instance int, group_instance int) string {
+    return fmt.Sprintf("%v-%v-%v", answer_id, answer_instance, group_instance)
+}
+
+
+func parse_answers(r *http.Request, group_instance int) map[string]string {
+    // TODO csrf
+
+    var answers = map[string]string{}
+    for k, vs := range r.Form {
+        if k != "csrf_token" && k[:6] != "action" {
+            // TODO ints and lists
+            answers[ak(k, 0, group_instance)] = vs[0]
+        }
+    }
+
+    return answers
+}
+
 func ParseTemplates() *template.Template {
     templ := template.New("")
     err := filepath.Walk("./flat_templates", func(path string, info os.FileInfo, err error) error {
@@ -339,5 +385,5 @@ func main() {
     http.HandleFunc("/completed", handle_completed)
     http.HandleFunc("/thank-you", handle_thank_you)
     http.HandleFunc("/dump/submission", handle_submission)
-    log.Fatal(http.ListenAndServe(":8080", nil))
+    log.Fatal(http.ListenAndServe(":5001", nil))
 }
