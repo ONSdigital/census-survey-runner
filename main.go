@@ -2,6 +2,7 @@ package main
 
 import (
     "fmt"
+    "time"
     "html/template"
     "log"
     "net/http"
@@ -10,6 +11,7 @@ import (
     "path/filepath"
     "strconv"
     "encoding/json"
+    "github.com/satori/go.uuid"
 )
 
 type MembersData struct {
@@ -113,13 +115,20 @@ var VISITOR_PAGES = []string{
 func handle_session(w http.ResponseWriter, r *http.Request) {
     // TODO decode JTI, create cookie session
 
+    user_id := uuid.Must(uuid.NewV4())
+    user_ik := uuid.Must(uuid.NewV4())
+
+    expiration := time.Now().Add(time.Hour)
+    http.SetCookie(w, &http.Cookie{Name: "user_id", Value: user_id.String(), Expires: expiration})
+    http.SetCookie(w, &http.Cookie{Name: "user_ik", Value: user_ik.String(), Expires: expiration})
+
     redirect(w, r, "/introduction")
 }
 
 func handle_introduction(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
         answers := parse_answers(r, 0)
-        update_answers(answers)
+        update_answers(r, answers)
         redirect(w, r, "/address")
         return
     }
@@ -130,7 +139,7 @@ func handle_introduction(w http.ResponseWriter, r *http.Request) {
 func handle_address(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
         answers := parse_answers(r, 0)
-        update_answers(answers)
+        update_answers(r, answers)
         redirect(w, r, "/members/introduction")
         return
     }
@@ -166,7 +175,7 @@ func handle_members(w http.ResponseWriter, r *http.Request) {
             answers = parse_answers(r, 0)
         }
 
-        update_answers(answers)
+        update_answers(r, answers)
 
         i := index(MEMBERS_PAGES, page) + 1
 
@@ -194,7 +203,7 @@ func handle_household(w http.ResponseWriter, r *http.Request) {
 
     if r.Method == http.MethodPost {
         answers := parse_answers(r, 0)
-        update_answers(answers)
+        update_answers(r, answers)
 
         i := index(HOUSEHOLD_PAGES, page) + 1
 
@@ -223,7 +232,7 @@ func handle_member(w http.ResponseWriter, r *http.Request) {
             answers = parse_answers(r, group_instance)
         }
 
-        update_answers(answers)
+        update_answers(r, answers)
 
         if page == "private-response" {
             if r.FormValue("private-response-answer")[:3] == "Yes" {
@@ -270,7 +279,7 @@ func handle_member(w http.ResponseWriter, r *http.Request) {
 func handle_visitors_introduction(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
         answers := parse_answers(r, 0)
-        update_answers(answers)
+        update_answers(r, answers)
         redirect(w, r, "/visitor/0/name")
         return
     }
@@ -291,7 +300,7 @@ func handle_visitor(w http.ResponseWriter, r *http.Request) {
             answers = parse_answers(r, group_instance)
         }
 
-        update_answers(answers)
+        update_answers(r, answers)
 
         num_visitors := 2 // TODO
 
@@ -317,7 +326,7 @@ func handle_visitor(w http.ResponseWriter, r *http.Request) {
 func handle_visitors_completed(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
         answers := parse_answers(r, 0)
-        update_answers(answers)
+        update_answers(r, answers)
         redirect(w, r, "/completed")
         return
     }
@@ -341,7 +350,8 @@ func handle_thank_you(w http.ResponseWriter, r *http.Request) {
 }
 
 func handle_submission(w http.ResponseWriter, r *http.Request) {
-    answers := get_answers("myuserid", "mykey")
+    user_id, _ := r.Cookie("user_id")
+    answers := get_answers(user_id.Value, "mykey")
     flat_answers := []AnswerData{}
 
     for k, v := range answers {
@@ -357,6 +367,10 @@ func handle_submission(w http.ResponseWriter, r *http.Request) {
     }
 
     json.NewEncoder(w).Encode(flat_answers)
+}
+
+func handle_status(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprint(w, "OK")
 }
 
 func index(slice []string, item string) int {
@@ -383,15 +397,16 @@ func put_answers(user_id string, answers map[string]string, key string) {
     storage[user_id] = answers // TODO encrypt
 }
 
-func update_answers(new_answers map[string]string) map[string]string {
+func update_answers(r *http.Request, new_answers map[string]string) map[string]string {
+    user_id, _ := r.Cookie("user_id")
     storage_key := "mykey" // TODO
-    answers := get_answers("myuserid", storage_key) // TODO get user from cookie
+    answers := get_answers(user_id.Value, storage_key) // TODO get user from cookie
 
     for k, v := range new_answers {
         answers[k] = v
     }
 
-    put_answers("myuserid", answers, storage_key)
+    put_answers(user_id.Value, answers, storage_key)
     return answers
 }
 
@@ -404,7 +419,7 @@ func parse_date(r *http.Request, answer_id string, group_instance int) map[strin
     year, _ := strconv.Atoi(r.Form[answer_id + "-year"][0])
     month, _ := strconv.Atoi(r.Form[answer_id + "-month"][0])
     day, _ := strconv.Atoi(r.Form[answer_id + "-day"][0])
-    value := fmt.Sprintf("%4d-%2d-%2d", year, month, day)
+    value := fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 
     return map[string]string{ak(answer_id, 0, group_instance): value}
 }
@@ -417,7 +432,7 @@ func parse_answers(r *http.Request, group_instance int) map[string]string {
     for k, vs := range r.Form {
         if k != "csrf_token" && k[:6] != "action" {
             // TODO ints and lists
-            answers[ak(k, 0, group_instance)] = vs[0]
+            answers[ak(k, 0, group_instance)] = strings.Join(vs, ",")
         }
     }
 
@@ -459,5 +474,6 @@ func main() {
     http.HandleFunc("/completed", handle_completed)
     http.HandleFunc("/thank-you", handle_thank_you)
     http.HandleFunc("/dump/submission", handle_submission)
+    http.HandleFunc("/status", handle_status)
     log.Fatal(http.ListenAndServe(":5001", nil))
 }
