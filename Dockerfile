@@ -1,21 +1,23 @@
-FROM python:3.7
+FROM golang:alpine as builder
 
-RUN pip install pipenv==2018.10.9
+RUN apk update && apk add git && apk add ca-certificates
 
-RUN mkdir -p /usr/src/app
-WORKDIR /usr/src/app
+RUN go get cloud.google.com/go/storage
+RUN go get github.com/satori/go.uuid
 
-ENV AWS_DEFAULT_REGION eu-west-1
-ENV GUNICORN_WORKERS 3
-ENV GUNICORN_WORKER_CLASS gevent
+COPY . $GOPATH/src/onsdigital/surveyrunner
+WORKDIR $GOPATH/src/onsdigital/surveyrunner
 
-COPY Pipfile Pipfile
-COPY Pipfile.lock Pipfile.lock
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /go/bin/main
 
-RUN pipenv install --deploy --system
+FROM scratch
+
+COPY --from=builder /go/bin/main /go/bin/main
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+COPY flat_templates /flat_templates
+COPY static /static
 
 EXPOSE 5000
 
-ENTRYPOINT ["sh", "docker-entrypoint.sh"]
-
-COPY . /usr/src/app
+ENTRYPOINT ["/go/bin/main"]

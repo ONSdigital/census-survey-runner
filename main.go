@@ -500,6 +500,9 @@ func ParseTemplates() *template.Template {
 }
 
 func GetGcsBucket() *storage.BucketHandle {
+    if storage_backend != "gcs" {
+        return nil
+    }
     client, err := storage.NewClient(ctx)
     if err != nil {
             log.Fatalf("Failed to create client: %v", err)
@@ -525,5 +528,5 @@ func main() {
     http.HandleFunc("/thank-you", handle_thank_you)
     http.HandleFunc("/dump/submission", handle_submission)
     http.HandleFunc("/status", handle_status)
-    log.Fatal(http.ListenAndServe(":5001", nil))
+    log.Fatal(http.ListenAndServe(":5000", nil))
 }
