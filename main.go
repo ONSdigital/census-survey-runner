@@ -7,11 +7,13 @@ import (
     "log"
     "net/http"
     "os"
+    "context"
     "strings"
     "path/filepath"
     "strconv"
     "encoding/json"
     "github.com/satori/go.uuid"
+    "cloud.google.com/go/storage"
 )
 
 type MembersData struct {
@@ -36,9 +38,15 @@ type AnswerData struct {
     Value string
 }
 
+var ctx = context.Background()
+
+var storage_backend = os.Getenv("EQ_STORAGE_BACKEND")
+
+var gcs_bucket = GetGcsBucket()
+
 var pages = ParseTemplates()
 
-var storage = map[string]map[string]string{}
+var local_storage = map[string]map[string]string{}
 
 var MEMBERS_PAGES = []string{
     "introduction",
@@ -387,14 +395,39 @@ func redirect(w http.ResponseWriter, r *http.Request, path string) {
 }
 
 func get_answers(user_id string, key string) map[string]string {
-    if val, ok := storage[user_id]; ok {
-        return val // TODO decrypt
+    // TODO decrypt
+    if storage_backend == "gcs" {
+        rc, err := gcs_bucket.Object("go/" + user_id).NewReader(ctx)
+        if err != nil {
+            log.Println(err)
+            return map[string]string{}
+        }
+        defer rc.Close()
+
+        var answers map[string]string
+        json.NewDecoder(rc).Decode(&answers)
+        return answers
+    } else {
+        if val, ok := local_storage[user_id]; ok {
+            return val
+        }
+        return map[string]string{}
     }
-    return map[string]string{}
 }
 
 func put_answers(user_id string, answers map[string]string, key string) {
-    storage[user_id] = answers // TODO encrypt
+    // TODO encrypt
+    if storage_backend == "gcs" {
+        wc := gcs_bucket.Object("go/" + user_id).NewWriter(ctx)
+
+        json.NewEncoder(wc).Encode(answers)
+
+        if err := wc.Close(); err != nil {
+                log.Println(err)
+        }
+    } else {
+        local_storage[user_id] = answers
+    }
 }
 
 func update_answers(r *http.Request, new_answers map[string]string) map[string]string {
@@ -457,6 +490,16 @@ func ParseTemplates() *template.Template {
     }
 
     return templ
+}
+
+func GetGcsBucket() *storage.BucketHandle {
+    client, err := storage.NewClient(ctx)
+    if err != nil {
+            log.Fatalf("Failed to create client: %v", err)
+    }
+
+    // TODO max pool connections?
+    return client.Bucket(os.Getenv("EQ_GCS_BUCKET_ID"))
 }
 
 func main() {
