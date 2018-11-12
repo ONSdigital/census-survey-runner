@@ -503,6 +503,9 @@ func GetGcsBucket() *storage.BucketHandle {
     if storage_backend != "gcs" {
         return nil
     }
+
+    http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 30
+
     client, err := storage.NewClient(ctx)
     if err != nil {
             log.Fatalf("Failed to create client: %v", err)
