@@ -196,6 +196,10 @@ func handle_members(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    user_id, _ := r.Cookie("user_id")
+    storage_key := "mykey" // TODO
+    get_answers(user_id.Value, storage_key)
+
     data := MembersData{ // TODO
         AddressLine1: "44 hill side",
         Members: []string{
@@ -268,6 +272,10 @@ func handle_member(w http.ResponseWriter, r *http.Request) {
         redirect(w, r, next)
         return
     }
+
+    user_id, _ := r.Cookie("user_id")
+    storage_key := "mykey" // TODO
+    get_answers(user_id.Value, storage_key)
 
     data := MemberData{ // TODO
         FirstName: "Danny",
@@ -419,7 +427,7 @@ func get_answers(user_id string, key string) (map[string]string, error) {
 }
 
 func put_answers(user_id string, answers map[string]string, key string) error {
-    // TODO encrypt
+    // TODO encrypt https://github.com/square/go-jose/blob/v2/symmetric.go#L120
     if storage_backend == "gcs" {
         wc := gcs_bucket.Object("go/" + user_id).NewWriter(ctx)
 
