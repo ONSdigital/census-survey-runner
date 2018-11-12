@@ -9,6 +9,7 @@ import (
     "strings"
     "path/filepath"
     "strconv"
+    "encoding/json"
 )
 
 type MembersData struct {
@@ -24,6 +25,13 @@ type MemberData struct {
 
 type VisitorData struct {
     VisitorNumber int
+}
+
+type AnswerData struct {
+    AnswerId string
+    AnswerInstance int
+    GroupInstance int
+    Value string
 }
 
 var pages = ParseTemplates()
@@ -121,7 +129,8 @@ func handle_introduction(w http.ResponseWriter, r *http.Request) {
 
 func handle_address(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
-        // TODO save answers
+        answers := parse_answers(r, 0)
+        update_answers(answers)
         redirect(w, r, "/members/introduction")
         return
     }
@@ -133,7 +142,31 @@ func handle_members(w http.ResponseWriter, r *http.Request) {
     page := r.URL.Path[len("/members/"):]
 
     if r.Method == http.MethodPost {
-        // TODO save answers
+        var answers map[string]string
+        if page == "household-composition" {
+            answers = map[string]string{}
+            r.ParseForm()
+            for k, v := range r.Form {
+                if k[:10] == "household-" {
+                    parts := strings.SplitN(k, "-", 3)
+                    answer_instance, _ := strconv.Atoi(parts[1])
+                    answers[ak(parts[2], answer_instance, 0)] = v[0]
+                }
+            }
+        } else if page == "household-relationships" {
+            answers = map[string]string{}
+            r.ParseForm()
+            for k, v := range r.Form {
+                if len(k) > 31 && k[:31] == "household-relationships-answer-" {
+                    answer_instance, _ := strconv.Atoi(k[31:])
+                    answers[ak("household-relationships-answer", answer_instance, 0)] = v[0]
+                }
+            }
+        } else {
+            answers = parse_answers(r, 0)
+        }
+
+        update_answers(answers)
 
         i := index(MEMBERS_PAGES, page) + 1
 
@@ -160,7 +193,8 @@ func handle_household(w http.ResponseWriter, r *http.Request) {
     page := r.URL.Path[len("/household/"):]
 
     if r.Method == http.MethodPost {
-        // TODO save answers
+        answers := parse_answers(r, 0)
+        update_answers(answers)
 
         i := index(HOUSEHOLD_PAGES, page) + 1
 
@@ -182,7 +216,14 @@ func handle_member(w http.ResponseWriter, r *http.Request) {
     page := parts[3]
 
     if r.Method == http.MethodPost {
-        // TODO save answers
+        var answers map[string]string
+        if page == "date-of-birth" {
+            answers = parse_date(r, "date-of-birth-answer", group_instance)
+        } else {
+            answers = parse_answers(r, group_instance)
+        }
+
+        update_answers(answers)
 
         if page == "private-response" {
             if r.FormValue("private-response-answer")[:3] == "Yes" {
@@ -228,7 +269,8 @@ func handle_member(w http.ResponseWriter, r *http.Request) {
 
 func handle_visitors_introduction(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
-        // TODO save answers
+        answers := parse_answers(r, 0)
+        update_answers(answers)
         redirect(w, r, "/visitor/0/name")
         return
     }
@@ -242,7 +284,14 @@ func handle_visitor(w http.ResponseWriter, r *http.Request) {
     page := parts[3]
 
     if r.Method == http.MethodPost {
-        // TODO save answers
+        var answers map[string]string
+        if page == "date-of-birth" {
+            answers = parse_date(r, "visitor-date-of-birth-answer", group_instance)
+        } else {
+            answers = parse_answers(r, group_instance)
+        }
+
+        update_answers(answers)
 
         num_visitors := 2 // TODO
 
@@ -267,7 +316,8 @@ func handle_visitor(w http.ResponseWriter, r *http.Request) {
 
 func handle_visitors_completed(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
-        // TODO save answers
+        answers := parse_answers(r, 0)
+        update_answers(answers)
         redirect(w, r, "/completed")
         return
     }
@@ -291,7 +341,22 @@ func handle_thank_you(w http.ResponseWriter, r *http.Request) {
 }
 
 func handle_submission(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprintf(w, "{}")
+    answers := get_answers("myuserid", "mykey")
+    flat_answers := []AnswerData{}
+
+    for k, v := range answers {
+        parts := strings.SplitN(k, ":", 3)
+        answer_instance, _ := strconv.Atoi(parts[1])
+        group_instance, _ := strconv.Atoi(parts[2])
+        flat_answers = append(flat_answers, AnswerData{
+            AnswerId: parts[0],
+            AnswerInstance: answer_instance,
+            GroupInstance: group_instance,
+            Value: v,
+        })
+    }
+
+    json.NewEncoder(w).Encode(flat_answers)
 }
 
 func index(slice []string, item string) int {
@@ -330,14 +395,23 @@ func update_answers(new_answers map[string]string) map[string]string {
     return answers
 }
 
-
 func ak(answer_id string, answer_instance int, group_instance int) string {
-    return fmt.Sprintf("%v-%v-%v", answer_id, answer_instance, group_instance)
+    return fmt.Sprintf("%v:%v:%v", answer_id, answer_instance, group_instance)
 }
 
+func parse_date(r *http.Request, answer_id string, group_instance int) map[string]string {
+    r.ParseForm()
+    year, _ := strconv.Atoi(r.Form[answer_id + "-year"][0])
+    month, _ := strconv.Atoi(r.Form[answer_id + "-month"][0])
+    day, _ := strconv.Atoi(r.Form[answer_id + "-day"][0])
+    value := fmt.Sprintf("%4d-%2d-%2d", year, month, day)
+
+    return map[string]string{ak(answer_id, 0, group_instance): value}
+}
 
 func parse_answers(r *http.Request, group_instance int) map[string]string {
     // TODO csrf
+    r.ParseForm()
 
     var answers = map[string]string{}
     for k, vs := range r.Form {
