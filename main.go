@@ -121,7 +121,7 @@ var VISITOR_PAGES = []string{
 }
 
 func handle_session(w http.ResponseWriter, r *http.Request) {
-    // TODO decode JTI, create cookie session
+    // TODO decode/validate JTI
 
     user_id := uuid.Must(uuid.NewV4())
     user_ik := uuid.Must(uuid.NewV4())
@@ -359,7 +359,7 @@ func handle_thank_you(w http.ResponseWriter, r *http.Request) {
 
 func handle_submission(w http.ResponseWriter, r *http.Request) {
     user_id, _ := r.Cookie("user_id")
-    answers := get_answers(user_id.Value, "mykey")
+    answers, _ := get_answers(user_id.Value, "mykey")
     flat_answers := []AnswerData{}
 
     for k, v := range answers {
@@ -394,28 +394,31 @@ func redirect(w http.ResponseWriter, r *http.Request, path string) {
     http.Redirect(w, r, "http://" + r.Host + path, http.StatusFound)
 }
 
-func get_answers(user_id string, key string) map[string]string {
+func get_answers(user_id string, key string) (map[string]string, error) {
     // TODO decrypt
     if storage_backend == "gcs" {
         rc, err := gcs_bucket.Object("go/" + user_id).NewReader(ctx)
         if err != nil {
-            log.Println(err)
-            return map[string]string{}
+            if err.Error() == "storage: object doesn't exist" {
+                return map[string]string{}, nil
+            } else {
+                return nil, err
+            }
         }
         defer rc.Close()
 
         var answers map[string]string
         json.NewDecoder(rc).Decode(&answers)
-        return answers
+        return answers, nil
     } else {
         if val, ok := local_storage[user_id]; ok {
-            return val
+            return val, nil
         }
-        return map[string]string{}
+        return map[string]string{}, nil
     }
 }
 
-func put_answers(user_id string, answers map[string]string, key string) {
+func put_answers(user_id string, answers map[string]string, key string) error {
     // TODO encrypt
     if storage_backend == "gcs" {
         wc := gcs_bucket.Object("go/" + user_id).NewWriter(ctx)
@@ -423,17 +426,21 @@ func put_answers(user_id string, answers map[string]string, key string) {
         json.NewEncoder(wc).Encode(answers)
 
         if err := wc.Close(); err != nil {
-                log.Println(err)
+            return err
         }
+
+        return nil
     } else {
         local_storage[user_id] = answers
+
+        return nil
     }
 }
 
 func update_answers(r *http.Request, new_answers map[string]string) map[string]string {
     user_id, _ := r.Cookie("user_id")
     storage_key := "mykey" // TODO
-    answers := get_answers(user_id.Value, storage_key) // TODO get user from cookie
+    answers, _ := get_answers(user_id.Value, storage_key)
 
     for k, v := range new_answers {
         answers[k] = v
