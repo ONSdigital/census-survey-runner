@@ -543,7 +543,13 @@ func getGcsBucket() *storage.BucketHandle {
         return nil
     }
 
-    http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 50
+    max_conns_per_host := 30
+    max_conns_per_host_str := os.Getenv("EQ_GCS_MAX_POOL_CONNECTIONS")
+    if max_conns_per_host_str != "" {
+        max_conns_per_host, _ = strconv.Atoi(max_conns_per_host_str)
+    }
+    // TODO don't do this globally
+    http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = max_conns_per_host
 
     client, err := storage.NewClient(ctx)
     if err != nil {
