@@ -48,9 +48,9 @@ var ctx = context.Background()
 
 var storage_backend = os.Getenv("EQ_STORAGE_BACKEND")
 
-var gcs_bucket = GetGcsBucket()
+var gcs_bucket = getGcsBucket()
 
-var pages = ParseTemplates()
+var pages = parseTemplates()
 
 var local_storage = map[string][]byte{}
 
@@ -128,7 +128,7 @@ var VISITOR_PAGES = []string{
     "completed",
 }
 
-func handle_session(w http.ResponseWriter, r *http.Request) {
+func handleSession(w http.ResponseWriter, r *http.Request) {
     // TODO decode/validate JTI
 
     user_id := uuid.Must(uuid.NewV4())
@@ -141,10 +141,10 @@ func handle_session(w http.ResponseWriter, r *http.Request) {
     redirect(w, r, "/introduction")
 }
 
-func handle_introduction(w http.ResponseWriter, r *http.Request) {
+func handleIntroduction(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
-        answers := parse_answers(r, 0)
-        update_answers(r, answers)
+        answers := parseAnswers(r, 0)
+        updateAnswers(r, answers)
         redirect(w, r, "/address")
         return
     }
@@ -152,10 +152,10 @@ func handle_introduction(w http.ResponseWriter, r *http.Request) {
     pages.ExecuteTemplate(w, "introduction", "")
 }
 
-func handle_address(w http.ResponseWriter, r *http.Request) {
+func handleAddress(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
-        answers := parse_answers(r, 0)
-        update_answers(r, answers)
+        answers := parseAnswers(r, 0)
+        updateAnswers(r, answers)
         redirect(w, r, "/members/introduction")
         return
     }
@@ -163,7 +163,7 @@ func handle_address(w http.ResponseWriter, r *http.Request) {
     pages.ExecuteTemplate(w, "address", "")
 }
 
-func handle_members(w http.ResponseWriter, r *http.Request) {
+func handleMembers(w http.ResponseWriter, r *http.Request) {
     page := r.URL.Path[len("/members/"):]
 
     if r.Method == http.MethodPost {
@@ -188,10 +188,10 @@ func handle_members(w http.ResponseWriter, r *http.Request) {
                 }
             }
         } else {
-            answers = parse_answers(r, 0)
+            answers = parseAnswers(r, 0)
         }
 
-        update_answers(r, answers)
+        updateAnswers(r, answers)
 
         i := index(MEMBERS_PAGES, page) + 1
 
@@ -206,7 +206,7 @@ func handle_members(w http.ResponseWriter, r *http.Request) {
 
     user_id, _ := r.Cookie("user_id")
     storage_key := makeKey(r)
-    get_answers(user_id.Value, storage_key)
+    getAnswers(user_id.Value, storage_key)
 
     data := MembersData{ // TODO
         AddressLine1: "44 hill side",
@@ -218,12 +218,12 @@ func handle_members(w http.ResponseWriter, r *http.Request) {
     pages.ExecuteTemplate(w, "members/" + page, data)
 }
 
-func handle_household(w http.ResponseWriter, r *http.Request) {
+func handleHousehold(w http.ResponseWriter, r *http.Request) {
     page := r.URL.Path[len("/household/"):]
 
     if r.Method == http.MethodPost {
-        answers := parse_answers(r, 0)
-        update_answers(r, answers)
+        answers := parseAnswers(r, 0)
+        updateAnswers(r, answers)
 
         i := index(HOUSEHOLD_PAGES, page) + 1
 
@@ -239,7 +239,7 @@ func handle_household(w http.ResponseWriter, r *http.Request) {
     pages.ExecuteTemplate(w, "household/" + page, "")
 }
 
-func handle_member(w http.ResponseWriter, r *http.Request) {
+func handleMember(w http.ResponseWriter, r *http.Request) {
     parts := strings.Split(r.URL.Path, "/")
     group_instance, _ := strconv.Atoi(parts[2])
     page := parts[3]
@@ -247,12 +247,12 @@ func handle_member(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
         var answers map[string]string
         if page == "date-of-birth" {
-            answers = parse_date(r, "date-of-birth-answer", group_instance)
+            answers = parseDate(r, "date-of-birth-answer", group_instance)
         } else {
-            answers = parse_answers(r, group_instance)
+            answers = parseAnswers(r, group_instance)
         }
 
-        update_answers(r, answers)
+        updateAnswers(r, answers)
 
         if page == "private-response" {
             if r.FormValue("private-response-answer")[:3] == "Yes" {
@@ -283,7 +283,7 @@ func handle_member(w http.ResponseWriter, r *http.Request) {
 
     user_id, _ := r.Cookie("user_id")
     storage_key := makeKey(r)
-    get_answers(user_id.Value, storage_key)
+    getAnswers(user_id.Value, storage_key)
 
     data := MemberData{ // TODO
         FirstName: "Danny",
@@ -300,10 +300,10 @@ func handle_member(w http.ResponseWriter, r *http.Request) {
     pages.ExecuteTemplate(w, "member/" + page, data)
 }
 
-func handle_visitors_introduction(w http.ResponseWriter, r *http.Request) {
+func handleVisitorsIntroduction(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
-        answers := parse_answers(r, 0)
-        update_answers(r, answers)
+        answers := parseAnswers(r, 0)
+        updateAnswers(r, answers)
         redirect(w, r, "/visitor/0/name")
         return
     }
@@ -311,7 +311,7 @@ func handle_visitors_introduction(w http.ResponseWriter, r *http.Request) {
     pages.ExecuteTemplate(w, "visitors_introduction", "")
 }
 
-func handle_visitor(w http.ResponseWriter, r *http.Request) {
+func handleVisitor(w http.ResponseWriter, r *http.Request) {
     parts := strings.Split(r.URL.Path, "/")
     group_instance, _ := strconv.Atoi(parts[2])
     page := parts[3]
@@ -319,12 +319,12 @@ func handle_visitor(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
         var answers map[string]string
         if page == "date-of-birth" {
-            answers = parse_date(r, "visitor-date-of-birth-answer", group_instance)
+            answers = parseDate(r, "visitor-date-of-birth-answer", group_instance)
         } else {
-            answers = parse_answers(r, group_instance)
+            answers = parseAnswers(r, group_instance)
         }
 
-        update_answers(r, answers)
+        updateAnswers(r, answers)
 
         num_visitors := 2 // TODO
 
@@ -347,10 +347,10 @@ func handle_visitor(w http.ResponseWriter, r *http.Request) {
     pages.ExecuteTemplate(w, "visitor/" + page, data)
 }
 
-func handle_visitors_completed(w http.ResponseWriter, r *http.Request) {
+func handleVisitorsCompleted(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
-        answers := parse_answers(r, 0)
-        update_answers(r, answers)
+        answers := parseAnswers(r, 0)
+        updateAnswers(r, answers)
         redirect(w, r, "/completed")
         return
     }
@@ -358,7 +358,7 @@ func handle_visitors_completed(w http.ResponseWriter, r *http.Request) {
     pages.ExecuteTemplate(w, "visitors_completed", "")
 }
 
-func handle_completed(w http.ResponseWriter, r *http.Request) {
+func handleCompleted(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodPost {
         // TODO validate and submit answers
         log.Print("Submitting answers")
@@ -369,14 +369,14 @@ func handle_completed(w http.ResponseWriter, r *http.Request) {
     pages.ExecuteTemplate(w, "completed", "")
 }
 
-func handle_thank_you(w http.ResponseWriter, r *http.Request) {
+func handleThankYou(w http.ResponseWriter, r *http.Request) {
     pages.ExecuteTemplate(w, "thank-you", "")
 }
 
-func handle_submission(w http.ResponseWriter, r *http.Request) {
+func handleSubmission(w http.ResponseWriter, r *http.Request) {
     user_id, _ := r.Cookie("user_id")
     storage_key := makeKey(r)
-    answers, _ := get_answers(user_id.Value, storage_key)
+    answers, _ := getAnswers(user_id.Value, storage_key)
     flat_answers := []AnswerData{}
 
     for k, v := range answers {
@@ -394,7 +394,7 @@ func handle_submission(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(flat_answers)
 }
 
-func handle_status(w http.ResponseWriter, r *http.Request) {
+func handleStatus(w http.ResponseWriter, r *http.Request) {
     fmt.Fprint(w, "OK")
 }
 
@@ -436,7 +436,7 @@ func decryptData(key []byte, data []byte) map[string]string {
 	return answers
 }
 
-func get_answers(user_id string, key []byte) (map[string]string, error) {
+func getAnswers(user_id string, key []byte) (map[string]string, error) {
     if storage_backend == "gcs" {
         rc, err := gcs_bucket.Object("go/" + user_id).NewReader(ctx)
         if err != nil {
@@ -458,7 +458,7 @@ func get_answers(user_id string, key []byte) (map[string]string, error) {
     }
 }
 
-func put_answers(user_id string, answers map[string]string, key []byte) error {
+func putAnswers(user_id string, answers map[string]string, key []byte) error {
     if storage_backend == "gcs" {
         wc := gcs_bucket.Object("go/" + user_id).NewWriter(ctx)
 
@@ -476,16 +476,16 @@ func put_answers(user_id string, answers map[string]string, key []byte) error {
     }
 }
 
-func update_answers(r *http.Request, new_answers map[string]string) map[string]string {
+func updateAnswers(r *http.Request, new_answers map[string]string) map[string]string {
     user_id, _ := r.Cookie("user_id")
     storage_key := makeKey(r)
-    answers, _ := get_answers(user_id.Value, storage_key)
+    answers, _ := getAnswers(user_id.Value, storage_key)
 
     for k, v := range new_answers {
         answers[k] = v
     }
 
-    put_answers(user_id.Value, answers, storage_key)
+    putAnswers(user_id.Value, answers, storage_key)
     return answers
 }
 
@@ -493,7 +493,7 @@ func ak(answer_id string, answer_instance int, group_instance int) string {
     return fmt.Sprintf("%v:%v:%v", answer_id, answer_instance, group_instance)
 }
 
-func parse_date(r *http.Request, answer_id string, group_instance int) map[string]string {
+func parseDate(r *http.Request, answer_id string, group_instance int) map[string]string {
     r.ParseForm()
     year, _ := strconv.Atoi(r.Form[answer_id + "-year"][0])
     month, _ := strconv.Atoi(r.Form[answer_id + "-month"][0])
@@ -503,7 +503,7 @@ func parse_date(r *http.Request, answer_id string, group_instance int) map[strin
     return map[string]string{ak(answer_id, 0, group_instance): value}
 }
 
-func parse_answers(r *http.Request, group_instance int) map[string]string {
+func parseAnswers(r *http.Request, group_instance int) map[string]string {
     // TODO csrf
     r.ParseForm()
 
@@ -518,7 +518,7 @@ func parse_answers(r *http.Request, group_instance int) map[string]string {
     return answers
 }
 
-func ParseTemplates() *template.Template {
+func parseTemplates() *template.Template {
     templ := template.New("")
     err := filepath.Walk("./flat_templates", func(path string, info os.FileInfo, err error) error {
         if strings.Contains(path, ".html") {
@@ -538,7 +538,7 @@ func ParseTemplates() *template.Template {
     return templ
 }
 
-func GetGcsBucket() *storage.BucketHandle {
+func getGcsBucket() *storage.BucketHandle {
     if storage_backend != "gcs" {
         return nil
     }
@@ -556,18 +556,18 @@ func GetGcsBucket() *storage.BucketHandle {
 func main() {
     fs := http.FileServer(http.Dir("static"))
     http.Handle("/static/", http.StripPrefix("/static/", fs))
-    http.HandleFunc("/session", handle_session)
-    http.HandleFunc("/introduction", handle_introduction)
-    http.HandleFunc("/address", handle_address)
-    http.HandleFunc("/members/", handle_members)
-    http.HandleFunc("/household/", handle_household)
-    http.HandleFunc("/member/", handle_member)
-    http.HandleFunc("/visitors_introduction", handle_visitors_introduction)
-    http.HandleFunc("/visitor/", handle_visitor)
-    http.HandleFunc("/visitors_completed", handle_visitors_completed)
-    http.HandleFunc("/completed", handle_completed)
-    http.HandleFunc("/thank-you", handle_thank_you)
-    http.HandleFunc("/dump/submission", handle_submission)
-    http.HandleFunc("/status", handle_status)
+    http.HandleFunc("/session", handleSession)
+    http.HandleFunc("/introduction", handleIntroduction)
+    http.HandleFunc("/address", handleAddress)
+    http.HandleFunc("/members/", handleMembers)
+    http.HandleFunc("/household/", handleHousehold)
+    http.HandleFunc("/member/", handleMember)
+    http.HandleFunc("/visitors_introduction", handleVisitorsIntroduction)
+    http.HandleFunc("/visitor/", handleVisitor)
+    http.HandleFunc("/visitors_completed", handleVisitorsCompleted)
+    http.HandleFunc("/completed", handleCompleted)
+    http.HandleFunc("/thank-you", handleThankYou)
+    http.HandleFunc("/dump/submission", handleSubmission)
+    http.HandleFunc("/status", handleStatus)
     log.Fatal(http.ListenAndServe(":5000", nil))
 }
