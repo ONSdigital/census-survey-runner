@@ -12,8 +12,14 @@ import (
     "path/filepath"
     "strconv"
     "encoding/json"
+    "io/ioutil"
     "github.com/satori/go.uuid"
     "cloud.google.com/go/storage"
+    "crypto/aes"
+    "crypto/sha256"
+    "crypto/rand"
+    "crypto/cipher"
+    "golang.org/x/crypto/pbkdf2"
 )
 
 type MembersData struct {
@@ -46,7 +52,9 @@ var gcs_bucket = GetGcsBucket()
 
 var pages = ParseTemplates()
 
-var local_storage = map[string]map[string]string{}
+var local_storage = map[string][]byte{}
+
+var SALT = []byte("this-a-a-dev-salt-only-for-testing")
 
 var MEMBERS_PAGES = []string{
     "introduction",
@@ -197,7 +205,7 @@ func handle_members(w http.ResponseWriter, r *http.Request) {
     }
 
     user_id, _ := r.Cookie("user_id")
-    storage_key := "mykey" // TODO
+    storage_key := makeKey(r)
     get_answers(user_id.Value, storage_key)
 
     data := MembersData{ // TODO
@@ -274,7 +282,7 @@ func handle_member(w http.ResponseWriter, r *http.Request) {
     }
 
     user_id, _ := r.Cookie("user_id")
-    storage_key := "mykey" // TODO
+    storage_key := makeKey(r)
     get_answers(user_id.Value, storage_key)
 
     data := MemberData{ // TODO
@@ -367,7 +375,8 @@ func handle_thank_you(w http.ResponseWriter, r *http.Request) {
 
 func handle_submission(w http.ResponseWriter, r *http.Request) {
     user_id, _ := r.Cookie("user_id")
-    answers, _ := get_answers(user_id.Value, "mykey")
+    storage_key := makeKey(r)
+    answers, _ := get_answers(user_id.Value, storage_key)
     flat_answers := []AnswerData{}
 
     for k, v := range answers {
@@ -402,8 +411,32 @@ func redirect(w http.ResponseWriter, r *http.Request, path string) {
     http.Redirect(w, r, "http://" + r.Host + path, http.StatusFound)
 }
 
-func get_answers(user_id string, key string) (map[string]string, error) {
-    // TODO decrypt
+func makeKey(r *http.Request) []byte {
+    user_id, _ := r.Cookie("user_id")
+    user_ik, _ := r.Cookie("user_ik")
+	return pbkdf2.Key([]byte(user_id.Value + user_ik.Value), SALT, 1000, 32, sha256.New)
+}
+
+func encryptData(key []byte, answers map[string]string) []byte {
+    data, _ := json.Marshal(answers)
+	iv := make([]byte, 12)
+	rand.Read(iv)
+	b, _ := aes.NewCipher(key)
+	aesgcm, _ := cipher.NewGCM(b)
+	return append(iv, aesgcm.Seal(nil, iv, data, nil)...)
+}
+
+func decryptData(key []byte, data []byte) map[string]string {
+	b, _ := aes.NewCipher(key)
+	aesgcm, _ := cipher.NewGCM(b)
+	decrypted, _ := aesgcm.Open(nil, data[:12], data[12:], nil)
+
+	var answers map[string]string
+	json.Unmarshal(decrypted, &answers)
+	return answers
+}
+
+func get_answers(user_id string, key []byte) (map[string]string, error) {
     if storage_backend == "gcs" {
         rc, err := gcs_bucket.Object("go/" + user_id).NewReader(ctx)
         if err != nil {
@@ -415,23 +448,21 @@ func get_answers(user_id string, key string) (map[string]string, error) {
         }
         defer rc.Close()
 
-        var answers map[string]string
-        json.NewDecoder(rc).Decode(&answers)
-        return answers, nil
+        encrypted, _ := ioutil.ReadAll(rc)
+        return decryptData(key, encrypted), nil
     } else {
         if val, ok := local_storage[user_id]; ok {
-            return val, nil
+            return decryptData(key, val), nil
         }
         return map[string]string{}, nil
     }
 }
 
-func put_answers(user_id string, answers map[string]string, key string) error {
-    // TODO encrypt https://github.com/square/go-jose/blob/v2/symmetric.go#L120
+func put_answers(user_id string, answers map[string]string, key []byte) error {
     if storage_backend == "gcs" {
         wc := gcs_bucket.Object("go/" + user_id).NewWriter(ctx)
 
-        json.NewEncoder(wc).Encode(answers)
+        wc.Write(encryptData(key, answers))
 
         if err := wc.Close(); err != nil {
             return err
@@ -439,7 +470,7 @@ func put_answers(user_id string, answers map[string]string, key string) error {
 
         return nil
     } else {
-        local_storage[user_id] = answers
+        local_storage[user_id] = encryptData(key, answers)
 
         return nil
     }
@@ -447,7 +478,7 @@ func put_answers(user_id string, answers map[string]string, key string) error {
 
 func update_answers(r *http.Request, new_answers map[string]string) map[string]string {
     user_id, _ := r.Cookie("user_id")
-    storage_key := "mykey" // TODO
+    storage_key := makeKey(r)
     answers, _ := get_answers(user_id.Value, storage_key)
 
     for k, v := range new_answers {
@@ -512,14 +543,13 @@ func GetGcsBucket() *storage.BucketHandle {
         return nil
     }
 
-    http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 30
+    http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = 50
 
     client, err := storage.NewClient(ctx)
     if err != nil {
             log.Fatalf("Failed to create client: %v", err)
     }
 
-    // TODO max pool connections?
     return client.Bucket(os.Getenv("EQ_GCS_BUCKET_ID"))
 }
 

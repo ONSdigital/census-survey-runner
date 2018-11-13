@@ -4,6 +4,7 @@ RUN apk update && apk add git && apk add ca-certificates
 
 RUN go get cloud.google.com/go/storage
 RUN go get github.com/satori/go.uuid
+RUN go get golang.org/x/crypto/pbkdf2
 
 COPY . $GOPATH/src/onsdigital/surveyrunner
 WORKDIR $GOPATH/src/onsdigital/surveyrunner
