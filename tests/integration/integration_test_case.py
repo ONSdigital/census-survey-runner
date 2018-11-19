@@ -11,6 +11,7 @@ from tests.integration.create_token import TokenGenerator
 
 from app import flask_theme_cache
 from app.keys import KEY_PURPOSE_AUTHENTICATION, KEY_PURPOSE_SUBMISSION
+from app.utilities import schema as schema_utils
 from app.setup import create_app
 
 with warnings.catch_warnings():
@@ -95,6 +96,7 @@ class IntegrationTestCase(unittest.TestCase):  # pylint: disable=too-many-public
         self._ddb.stop()
 
         flask_theme_cache.clear()
+        schema_utils.clear_schema_cache()
 
     def launchSurvey(self, eq_id='test', form_type_id='dates', **payload_kwargs):
         """
