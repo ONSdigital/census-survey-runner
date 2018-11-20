@@ -1,10 +1,12 @@
 import requests
-from google.auth.transport.requests import AuthorizedSession, Request
+from aiohttp import web
+from google.auth.transport.requests import AuthorizedSession
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 import logging;logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
     level=logging.INFO,
     datefmt='%Y-%m-%d %H:%M:%S')
-#import newrelic.agent; newrelic.agent.initialize()
 
 import os
 import ujson
@@ -14,13 +16,11 @@ import boto3
 import yaml
 import google.auth
 from botocore.config import Config
-from flask import Flask, render_template, request, session
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
 from jwcrypto import jwe
 from sdc.crypto.decrypter import decrypt
 from sdc.crypto.key_store import KeyStore
-from werkzeug.utils import redirect
 
 from app.authentication.user_id_generator import UserIDGenerator
 from app.keys import KEY_PURPOSE_AUTHENTICATION
@@ -75,10 +75,15 @@ with open(os.getenv('EQ_KEYS_FILE', 'keys.yml')) as f:
 with open(os.getenv('EQ_SECRETS_FILE', 'secrets.yml')) as secrets_file:
     secrets = yaml.safe_load(secrets_file)['secrets']
 
-app = Flask(__name__, template_folder='flat_templates')
-app.secret_key = secrets['EQ_SECRET_KEY']
+
+routes = web.RouteTableDef()
 
 id_generator = UserIDGenerator(10000, secrets['EQ_SERVER_SIDE_STORAGE_USER_ID_SALT'], secrets['EQ_SERVER_SIDE_STORAGE_USER_IK_SALT'])
+
+env = Environment(
+    loader=FileSystemLoader('flat_templates'),
+    autoescape=select_autoescape(['html', 'xml'])
+)
 
 PEPPER = secrets['EQ_SERVER_SIDE_STORAGE_ENCRYPTION_USER_PEPPER']
 
@@ -171,12 +176,9 @@ VISITOR_PAGES = [
 ]
 
 
-@app.route('/session')
-def create_session():
-    if session:
-        session.clear()
-
-    decrypted_token = decrypt(token=request.args.get('token'), key_store=key_store, key_purpose=KEY_PURPOSE_AUTHENTICATION, leeway=120)
+@routes.get('/session')
+async def create_session(request):
+    decrypted_token = decrypt(token=request.query['token'], key_store=key_store, key_purpose=KEY_PURPOSE_AUTHENTICATION, leeway=120)
 
     # TODO validate JTI
 
@@ -185,69 +187,78 @@ def create_session():
     user_id = id_generator.generate_id(claims)
     user_ik = id_generator.generate_ik(claims)
 
-    session['user_id'] = user_id
-    session['user_ik'] = user_ik
-
-    return redirect('/introduction')
-
-
-@app.route('/fake_session')
-def create_fake_session():
-    if session:
-        session.clear()
-
-    session['user_id'] = str(uuid4())
-    session['user_ik'] = str(uuid4())
-
-    return redirect('/introduction')
+    resp = redirect(request, '/introduction')
+    resp.set_cookie('user_id', user_id)
+    resp.set_cookie('user_ik', user_ik)
+    raise resp
 
 
-@app.route('/introduction', methods=['GET', 'POST'])
-def handle_introduction():
-    if request.method == 'POST':
-        answers = parse_answers(0)
-        update_answers(answers)
-        return redirect('/address')
+@routes.get('/fake_session')
+async def create_fake_session(request):
+    resp = redirect(request, '/introduction')
+    resp.set_cookie('user_id', str(uuid4()))
+    resp.set_cookie('user_ik', str(uuid4()))
+    raise resp
 
+
+@routes.post('/introduction')
+async def handle_introduction_post(request):
+    answers = await parse_answers(request, 0)
+    update_answers(request, answers)
+    raise redirect(request, '/address')
+
+
+@routes.get('/introduction')
+async def handle_introduction(request):
     return render_template('introduction.html')
 
 
-@app.route('/address', methods=['GET', 'POST'])
-def handle_address():
-    if request.method == 'POST':
-        answers = parse_answers(0)
-        update_answers(answers)
-        return redirect('/members/introduction')
+@routes.post('/address')
+async def handle_address_post(request):
+    answers = await parse_answers(request, 0)
+    update_answers(request, answers)
+    raise redirect(request, '/members/introduction')
 
+
+@routes.get('/address')
+async def handle_address(request):
     return render_template('address.html')
 
 
-@app.route('/members/<page>', methods=['GET', 'POST'])
-def handle_members(page):
-    if request.method == 'POST':
-        if page == 'household-composition':
-            answers = {}
-            for k, v in request.form.items():
-                if k.startswith('household-'):
-                    _, answer_instance, k = k.split('-', 2)
-                    answer_instance = int(answer_instance)
-                    answers[ak(k, answer_instance, 0)] = v
-        elif page == 'household-relationships':
-            answers = {}
-            for k, v in request.form.items():
-                if k.startswith('household-relationships-answer-'):
-                    _, answer_instance = k.rsplit('-', 1)
-                    answer_instance = int(answer_instance)
-                    answers[ak('household-relationships-answer', answer_instance, 0)] = v
-        else:
-            answers = parse_answers(0)
+@routes.post('/members/{page}')
+async def handle_members_post(request):
+    page = request.match_info['page']
 
-        update_answers(answers)
-        i = MEMBERS_PAGES.index(page) + 1
-        return redirect('/household/introduction' if i >= len(MEMBERS_PAGES) else '/members/{}'.format(MEMBERS_PAGES[i]))
+    if page == 'household-composition':
+        answers = {}
+        data = await request.post()
+        for k, v in data.items():
+            if k.startswith('household-'):
+                _, answer_instance, k = k.split('-', 2)
+                answer_instance = int(answer_instance)
+                answers[ak(k, answer_instance, 0)] = v
+    elif page == 'household-relationships':
+        answers = {}
+        data = await request.post()
+        for k, v in data.items():
+            if k.startswith('household-relationships-answer-'):
+                _, answer_instance = k.rsplit('-', 1)
+                answer_instance = int(answer_instance)
+                answers[ak('household-relationships-answer', answer_instance, 0)] = v
+    else:
+        answers = await parse_answers(request, 0)
 
-    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], PEPPER)
-    answers = get_answers(session['user_id'], storage_key)
+    update_answers(request, answers)
+    i = MEMBERS_PAGES.index(page) + 1
+    raise redirect(request, '/household/introduction' if i >= len(MEMBERS_PAGES) else '/members/{}'.format(MEMBERS_PAGES[i]))
+
+
+@routes.get('/members/{page}')
+async def handle_members(request):
+    page = request.match_info['page']
+
+    storage_key = StorageEncryption._generate_key(request.cookies['user_id'], request.cookies['user_ik'], PEPPER)
+    answers = get_answers(request.cookies['user_id'], storage_key)
 
     first_names = [v for (k, v) in answers.items() if k.startswith('first-name-')]
     middle_names = [v for (k, v) in answers.items() if k.startswith('middle-names-')]
@@ -259,46 +270,61 @@ def handle_members(page):
     return render_template('members/{}.html'.format(page), members=members, address_line_1=address_line_1)
 
 
-@app.route('/household/<page>', methods=['GET', 'POST'])
-def handle_household(page):
-    if request.method == 'POST':
-        answers = parse_answers(0)
-        update_answers(answers)
-        i = HOUSEHOLD_PAGES.index(page) + 1
-        return redirect('/member/0/introduction' if i >= len(HOUSEHOLD_PAGES) else '/household/{}'.format(HOUSEHOLD_PAGES[i]))
+@routes.post('/household/{page}')
+async def handle_household_post(request):
+    page = request.match_info['page']
+
+    answers = await parse_answers(request, 0)
+    update_answers(request, answers)
+    i = HOUSEHOLD_PAGES.index(page) + 1
+    raise redirect(request, '/member/0/introduction' if i >= len(HOUSEHOLD_PAGES) else '/household/{}'.format(HOUSEHOLD_PAGES[i]))
+
+
+@routes.get('/household/{page}')
+async def handle_household(request):
+    page = request.match_info['page']
 
     return render_template('household/{}.html'.format(page))
 
 
-@app.route('/member/<int:group_instance>/<page>', methods=['GET', 'POST'])
-def handle_member(group_instance, page):
-    if request.method == 'POST':
-        if page == 'date-of-birth':
-            answers = parse_date('date-of-birth-answer', group_instance)
-        else:
-            answers = parse_answers(group_instance)
+@routes.post('/member/{group_instance}/{page}')
+async def handle_member_post(request):
+    group_instance = int(request.match_info['group_instance'])
+    page = request.match_info['page']
 
-        answers = update_answers(answers)
+    if page == 'date-of-birth':
+        answers = await parse_date(request, 'date-of-birth-answer', group_instance)
+    else:
+        answers = await parse_answers(request, group_instance)
 
-        if page == 'private-response':
-            if request.form['private-response-answer'].startswith('Yes'):
-                return redirect('/member/{}/request-private-response'.format(group_instance))
+    answers = update_answers(request, answers)
 
-        if page == 'request-private-response':
-            return redirect('/member/{}/completed'.format(group_instance))
+    if page == 'private-response':
+        data = await request.post()
+        if data['private-response-answer'].startswith('Yes'):
+            raise redirect(request, '/member/{}/request-private-response'.format(group_instance))
 
-        i = MEMBER_PAGES.index(page) + 1
-        if i < len(MEMBER_PAGES):
-            return redirect('/member/{}/{}'.format(group_instance, MEMBER_PAGES[i]))
+    if page == 'request-private-response':
+        raise redirect(request, '/member/{}/completed'.format(group_instance))
 
-        num_members = len([a for a in answers.keys() if a.startswith('first-name-')])
+    i = MEMBER_PAGES.index(page) + 1
+    if i < len(MEMBER_PAGES):
+        raise redirect(request, '/member/{}/{}'.format(group_instance, MEMBER_PAGES[i]))
 
-        group_instance += 1
+    num_members = len([a for a in answers.keys() if a.startswith('first-name-')])
 
-        return redirect('/visitors_introduction' if group_instance >= num_members else '/member/{}/introduction'.format(group_instance))
+    group_instance += 1
 
-    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], PEPPER)
-    answers = get_answers(session['user_id'], storage_key)
+    raise redirect(request, '/visitors_introduction' if group_instance >= num_members else '/member/{}/introduction'.format(group_instance))
+
+
+@routes.get('/member/{group_instance}/{page}')
+async def handle_member(request):
+    group_instance = int(request.match_info['group_instance'])
+    page = request.match_info['page']
+
+    storage_key = StorageEncryption._generate_key(request.cookies['user_id'], request.cookies['user_ik'], PEPPER)
+    answers = get_answers(request.cookies['user_id'], storage_key)
 
     first_name = answers[ak('first-name', group_instance, 0)]
     middle_names = answers[ak('middle-names', group_instance, 0)]
@@ -307,68 +333,82 @@ def handle_member(group_instance, page):
     return render_template('member/{}.html'.format(page), first_name=first_name, middle_names=middle_names, last_name=last_name)
 
 
-@app.route('/visitors_introduction', methods=['GET', 'POST'])
-def handle_visitors_introduction():
-    if request.method == 'POST':
-        answers = parse_answers(0)
-        update_answers(answers)
-        return redirect('/visitor/0/name')
+@routes.post('/visitors_introduction')
+async def handle_visitors_introduction_post(request):
+    answers = await parse_answers(request, 0)
+    update_answers(request, answers)
+    raise redirect(request, '/visitor/0/name')
 
+
+@routes.get('/visitors_introduction')
+async def handle_visitors_introduction(request):
     return render_template('visitors_introduction.html')
 
 
-@app.route('/visitor/<int:group_instance>/<page>', methods=['GET', 'POST'])
-def handle_visitor(group_instance, page):
-    if request.method == 'POST':
-        if page == 'date-of-birth':
-            answers = parse_date('visitor-date-of-birth-answer', group_instance)
-        else:
-            answers = parse_answers(group_instance)
+@routes.post('/visitor/{group_instance}/{page}')
+async def handle_visitor_post(request):
+    group_instance = int(request.match_info['group_instance'])
+    page = request.match_info['page']
 
-        answers = update_answers(answers)
+    if page == 'date-of-birth':
+        answers = await parse_date(request, 'visitor-date-of-birth-answer', group_instance)
+    else:
+        answers = await parse_answers(request, group_instance)
 
-        i = VISITOR_PAGES.index(page) + 1
-        if i < len(VISITOR_PAGES):
-            return redirect('/visitor/{}/{}'.format(group_instance, VISITOR_PAGES[i]))
+    answers = update_answers(request, answers)
 
-        num_visitors = answers[ak('overnight-visitors-answer', 0, 0)]
+    i = VISITOR_PAGES.index(page) + 1
+    if i < len(VISITOR_PAGES):
+        raise redirect(request, '/visitor/{}/{}'.format(group_instance, VISITOR_PAGES[i]))
 
-        group_instance += 1
+    num_visitors = answers[ak('overnight-visitors-answer', 0, 0)]
 
-        return redirect('/visitors_completed' if group_instance >= num_visitors else '/visitor/{}/name'.format(group_instance))
+    group_instance += 1
+
+    raise redirect(request, '/visitors_completed' if group_instance >= num_visitors else '/visitor/{}/name'.format(group_instance))
+
+
+@routes.get('/visitor/{group_instance}/{page}')
+async def handle_visitor(request):
+    group_instance = int(request.match_info['group_instance'])
+    page = request.match_info['page']
 
     return render_template('visitor/{}.html'.format(page), group_instance=group_instance)
 
 
-@app.route('/visitors_completed', methods=['GET', 'POST'])
-def handle_visitors_completed():
-    if request.method == 'POST':
-        answers = parse_answers(0)
-        update_answers(answers)
-        return redirect('/completed')
+@routes.post('/visitors_completed')
+async def handle_visitors_completed_post(request):
+    answers = await parse_answers(request, 0)
+    update_answers(request, answers)
+    raise redirect(request, '/completed')
 
+
+@routes.get('/visitors_completed')
+async def handle_visitors_completed(request):
     return render_template('visitors_completed.html')
 
 
-@app.route('/completed', methods=['GET', 'POST'])
-def handle_completed():
-    if request.method == 'POST':
-        print('Submitting', get_submission()[:100])
-        # TODO validate and submit answers
-        return redirect('/thank-you')
+@routes.post('/completed')
+async def handle_completed_post(request):
+    print('Submitting answers')
+    # TODO validate and submit answers
+    raise redirect(request, '/thank-you')
 
+
+@routes.get('/completed')
+async def handle_completed(request):
     return render_template('completed.html')
 
 
-@app.route('/thank-you')
-def handle_thank_you():
+@routes.get('/thank-you')
+async def handle_thank_you(request):
     return render_template('thank-you.html')
 
 
-@app.route('/dump/submission')
-def get_submission():
-    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], PEPPER)
-    answers = get_answers(session['user_id'], storage_key)
+@routes.get('/dump/submission')
+async def get_submission(request):
+    storage_key = StorageEncryption._generate_key(request.cookies['user_id'], request.cookies['user_ik'], PEPPER)
+    answers = get_answers(request.cookies['user_id'], storage_key)
 
     flat_answers = []
 
@@ -405,12 +445,12 @@ def get_submission():
         }
     }
 
-    return ujson.dumps(submission)
+    return web.json_response(submission)
 
 
-@app.route('/status')
-def handle_status():
-    return 'ok'
+@routes.get('/status')
+async def handle_status(request):
+    return web.Response(text='ok')
 
 
 def encrypt_data(key, data):
@@ -425,11 +465,11 @@ def decrypt_data(key, encrypted_token):
     return ujson.loads(jwe_token.payload.decode())
 
 
-def update_answers(new_answers):
-    storage_key = StorageEncryption._generate_key(session['user_id'], session['user_ik'], PEPPER)
-    answers = get_answers(session['user_id'], storage_key)
+def update_answers(request, new_answers):
+    storage_key = StorageEncryption._generate_key(request.cookies['user_id'], request.cookies['user_ik'], PEPPER)
+    answers = get_answers(request.cookies['user_id'], storage_key)
     answers.update(new_answers)
-    put_answers(session['user_id'], answers, storage_key)
+    put_answers(request.cookies['user_id'], answers, storage_key)
     return answers
 
 
@@ -437,27 +477,42 @@ def ak(answer_id, answer_instance, group_instance):
     return '{}-{}-{}'.format(answer_id, answer_instance, group_instance)
 
 
-def parse_date(answer_id, group_instance):
-    value = '{:04d}-{:02d}-{:02d}'.format(int(request.form[answer_id + '-year']), int(request.form[answer_id + '-month']), int(request.form[answer_id + '-day']))
+async def parse_date(request, answer_id, group_instance):
+    data = await request.post()
+    value = '{:04d}-{:02d}-{:02d}'.format(int(data[answer_id + '-year']), int(data[answer_id + '-month']), int(data[answer_id + '-day']))
 
     return {ak(answer_id, 0, group_instance): value}
 
 
-def parse_answers(group_instance):
+async def parse_answers(request, group_instance):
     # TODO csrf
 
     answers = {}
-    for k, v in request.form.items():
+    data = await request.post()
+    for k in data.keys():
         if k != 'csrf_token' and not k.startswith('action'):
             if k in INT_ANSWERS:
-                v = int(v) if v else None
+                v = int(data.get(k)) if k in data else None
             elif k in LIST_ANSWERS:
-                v = request.form.getlist(k)
+                v = data.getall(k)
+            else:
+                v = data.get(k)
 
             answers[ak(k, 0, group_instance)] = v
 
     return answers
 
 
+def redirect(request, path):
+    return web.HTTPFound("http://" + request.host + path)
+
+
+def render_template(template_name, **kwargs):
+    return web.Response(text=env.get_template(template_name).render(kwargs), content_type='text/html')
+
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001)
+    app = web.Application()
+    app.add_routes(routes)
+    app.router.add_static('/static/', 'static')
+    web.run_app(app, port=5000)
