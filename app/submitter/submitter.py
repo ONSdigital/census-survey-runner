@@ -1,4 +1,5 @@
 from google.cloud.pubsub_v1 import PublisherClient
+from google.cloud import storage
 from pika import BasicProperties
 from pika import BlockingConnection
 from pika import URLParameters
@@ -29,6 +30,20 @@ class PubSubSubmitter():  # pylint: disable=no-self-use
     def send_message(self, message, queue, tx_id):  # pylint: disable=unused-argument
         logger.info('sending message')
         self.publisher.publish(self.topic_path, str(message).encode('utf8'))
+        return True
+
+
+class GCSSubmitter():  # pylint: disable=no-self-use
+
+    def __init__(self, bucket_name):
+        client = storage.Client()
+        self.bucket = client.get_bucket(bucket_name)
+
+    def send_message(self, message, queue, tx_id):  # pylint: disable=unused-argument
+        logger.info('sending message')
+
+        blob = self.bucket.blob(tx_id)
+        blob.upload_from_string(str(message).encode('utf8'))
         return True
 
 

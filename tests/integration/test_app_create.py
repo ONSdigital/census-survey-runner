@@ -7,7 +7,12 @@ from flask import Flask, request
 from flask_babel import Babel
 
 from app.setup import create_app, versioned_url_for, get_database_uri
-from app.submitter.submitter import LogSubmitter, RabbitMQSubmitter, PubSubSubmitter
+from app.submitter.submitter import (
+    GCSSubmitter,
+    LogSubmitter,
+    RabbitMQSubmitter,
+    PubSubSubmitter,
+)
 
 
 class TestCreateApp(unittest.TestCase):  # pylint: disable=too-many-public-methods
@@ -188,6 +193,13 @@ class TestCreateApp(unittest.TestCase):  # pylint: disable=too-many-public-metho
         application = create_app(self._setting_overrides)
 
         self.assertIsInstance(application.eq['submitter'], PubSubSubmitter)
+
+    @patch('google.cloud.storage.Client')
+    def test_adds_gcs_submitter_to_the_application(self, _):
+        self._setting_overrides['EQ_SUBMITTER'] = 'gcs'
+        application = create_app(self._setting_overrides)
+
+        self.assertIsInstance(application.eq['submitter'], GCSSubmitter)
 
     def test_defaults_to_adding_the_log_submitter_to_the_application(self):
         self._setting_overrides['EQ_SUBMITTER'] = 'log'
