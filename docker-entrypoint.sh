@@ -5,4 +5,5 @@ if [ -n "$SECRETS_S3_BUCKET" ]; then
     aws s3 sync s3://$SECRETS_S3_BUCKET/ /secrets
 fi
 
-gunicorn -w $GUNICORN_WORKERS --worker-class $GUNICORN_WORKER_CLASS -b 0.0.0.0:5000 flat_application:app
+#gunicorn -w $GUNICORN_WORKERS --worker-class $GUNICORN_WORKER_CLASS -b 0.0.0.0:5000 flat_application:app
+python flat_application.py

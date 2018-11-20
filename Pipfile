@@ -4,17 +4,14 @@ name = "pypi"
 verify_ssl = true
 
 [packages]
-requests = "*"
 sdc-cryptography = "==0.2.3"
-"boto3" = ">=1.7.0,<1.8.0"
-google-cloud-core = "*"
-google-cloud-storage = "*"
+gcloud-aio-storage = "*"
 ujson = "*"
-redis = "*"
 aiohttp = "*"
 aiodns = "*"
 cchardet = "*"
 Jinja2 = "*"
+structlog = "*"
 
 [requires]
 python_version = "3.7"

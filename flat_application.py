@@ -1,23 +1,18 @@
-import requests
-from aiohttp import web
-from google.auth.transport.requests import AuthorizedSession
+import datetime
+from asyncio import ensure_future
+
+import backoff
+from aiohttp import web, ClientSession, ClientResponseError, TCPConnector
+from gcloud.aio.auth import Token
+from gcloud.aio.storage import Storage
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-import logging;logging.basicConfig(
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S')
 
 import os
 import ujson
 from uuid import uuid4
 
-import boto3
 import yaml
-import google.auth
-from botocore.config import Config
-from google.cloud import storage
-from google.cloud.exceptions import NotFound
 from jwcrypto import jwe
 from sdc.crypto.decrypter import decrypt
 from sdc.crypto.key_store import KeyStore
@@ -27,46 +22,92 @@ from app.keys import KEY_PURPOSE_AUTHENTICATION
 from app.storage.metadata_parser import parse_runner_claims
 from app.storage.storage_encryption import StorageEncryption
 
+
 storage_backend = os.getenv('EQ_STORAGE_BACKEND')
 if storage_backend == 'gcs':
-    gcs_session = AuthorizedSession(google.auth.default()[0])
-    gcs_session.mount('https://', requests.adapters.HTTPAdapter(pool_maxsize=int(os.getenv('EQ_GCS_MAX_POOL_CONNECTIONS', '30'))))
-    client = storage.Client(_http=gcs_session)
-    gcs_bucket = client.get_bucket(os.getenv('EQ_GCS_BUCKET_ID'))
+    class ComputeEngineToken(Token):
 
-    def get_answers(user_id, key):
+        def __init__(self, project, session=None):
+            self.project = project
+
+            self.session = session
+
+            self.access_token = None
+            self.access_token_duration = None
+            self.access_token_acquired_at = None
+
+            self.acquiring = None
+
+        async def get(self):
+            await self.ensure_token()
+            return self.access_token
+
+        async def ensure_token(self):
+            if self.acquiring:
+                await self.acquiring
+                return
+
+            if not self.access_token:
+                self.acquiring = ensure_future(self.acquire_access_token())
+                await self.acquiring
+                return
+
+            now = datetime.datetime.now()
+            delta = (now - self.access_token_acquired_at).total_seconds()
+            if delta <= self.access_token_duration / 2:
+                return
+
+            self.acquiring = ensure_future(self.acquire_access_token())
+            await self.acquiring
+
+        @backoff.on_exception(backoff.expo, Exception, max_tries=5)
+        async def acquire_access_token(self):
+            if not self.session:
+                self.session = ClientSession(conn_timeout=10, read_timeout=10)
+
+            headers = {'metadata-flavor': 'Google'}
+            resp = await self.session.get('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', headers=headers, timeout=10)
+            resp.raise_for_status()
+            content = await resp.json()
+
+            self.access_token = str(content['access_token'])
+            self.access_token_duration = int(content['expires_in'])
+            self.access_token_acquired_at = datetime.datetime.now()
+            self.acquiring = None
+            return True
+
+    project = os.getenv('GOOGLE_CLOUD_PROJECT')
+    session = ClientSession(connector=TCPConnector(limit=int(os.getenv('EQ_GCS_MAX_POOL_CONNECTIONS', '30'))))
+    creds = os.getenv('EQ_GCS_CREDENTIALS', 'META')
+    if creds == 'META':
+        token = ComputeEngineToken(project, session=session)
+        storage = Storage(project, None, token=token, session=session)
+    else:
+        storage = Storage(project, creds, session=session)
+
+
+    @backoff.on_exception(backoff.expo, Exception, max_tries=10)
+    async def get_answers(user_id, key):
         try:
-            blob = gcs_bucket.blob('{}/{}'.format('flat', user_id))
-            return decrypt_data(key, blob.download_as_string().decode())
-        except NotFound:
-            return {}
+            data = await storage.download_as_string(os.getenv('EQ_GCS_BUCKET_ID'), 'flat/' + user_id)
+            return decrypt_data(key, data)
+        except ClientResponseError as e:
+            if e.status == 404:
+                return {}
 
-    def put_answers(user_id, answers, key):
-        blob = gcs_bucket.blob('{}/{}'.format('flat', user_id))
-        blob.upload_from_string(encrypt_data(key, answers))
-elif storage_backend == 'dynamodb':
-    dynamodb = boto3.resource('dynamodb', endpoint_url=os.getenv('EQ_DYNAMODB_ENDPOINT'), config=Config(
-        retries={'max_attempts': int(os.getenv('EQ_DYNAMODB_MAX_RETRIES', '5'))},
-        max_pool_connections=int(os.getenv('EQ_DYNAMODB_MAX_POOL_CONNECTIONS', '30')),
-    ))
-    dynamodb_table_name = os.getenv('EQ_QUESTIONNAIRE_STATE_TABLE_NAME', 'dev-questionnaire-state')
+            raise e
 
-    def get_answers(user_id, key):
-        table = dynamodb.Table(dynamodb_table_name)
-        response = table.get_item(Key={'user_id': user_id}, ConsistentRead=True)
-        item = response.get('Item')
-        return decrypt_data(key, item['answers']) if item else {}
 
-    def put_answers(user_id, answers, key):
-        table = dynamodb.Table(dynamodb_table_name)
-        table.put_item(Item={'user_id': user_id, 'answers': encrypt_data(key, answers)})
+    @backoff.on_exception(backoff.expo, Exception, max_tries=10)
+    async def put_answers(user_id, answers, key):
+        await storage.upload(os.getenv('EQ_GCS_BUCKET_ID'), 'flat/' + user_id, encrypt_data(key, answers))
 else:
     storage = {}
 
-    def get_answers(user_id, key):
+    async def get_answers(user_id, key):
         return decrypt_data(key, storage[user_id]) if user_id in storage else {}
 
-    def put_answers(user_id, answers, key):
+    async def put_answers(user_id, answers, key):
         storage[user_id] = encrypt_data(key, answers)
 
 with open(os.getenv('EQ_KEYS_FILE', 'keys.yml')) as f:
@@ -204,7 +245,7 @@ async def create_fake_session(request):
 @routes.post('/introduction')
 async def handle_introduction_post(request):
     answers = await parse_answers(request, 0)
-    update_answers(request, answers)
+    await update_answers(request, answers)
     raise redirect(request, '/address')
 
 
@@ -216,7 +257,7 @@ async def handle_introduction(request):
 @routes.post('/address')
 async def handle_address_post(request):
     answers = await parse_answers(request, 0)
-    update_answers(request, answers)
+    await update_answers(request, answers)
     raise redirect(request, '/members/introduction')
 
 
@@ -248,7 +289,7 @@ async def handle_members_post(request):
     else:
         answers = await parse_answers(request, 0)
 
-    update_answers(request, answers)
+    await update_answers(request, answers)
     i = MEMBERS_PAGES.index(page) + 1
     raise redirect(request, '/household/introduction' if i >= len(MEMBERS_PAGES) else '/members/{}'.format(MEMBERS_PAGES[i]))
 
@@ -258,7 +299,7 @@ async def handle_members(request):
     page = request.match_info['page']
 
     storage_key = StorageEncryption._generate_key(request.cookies['user_id'], request.cookies['user_ik'], PEPPER)
-    answers = get_answers(request.cookies['user_id'], storage_key)
+    answers = await get_answers(request.cookies['user_id'], storage_key)
 
     first_names = [v for (k, v) in answers.items() if k.startswith('first-name-')]
     middle_names = [v for (k, v) in answers.items() if k.startswith('middle-names-')]
@@ -275,7 +316,7 @@ async def handle_household_post(request):
     page = request.match_info['page']
 
     answers = await parse_answers(request, 0)
-    update_answers(request, answers)
+    await update_answers(request, answers)
     i = HOUSEHOLD_PAGES.index(page) + 1
     raise redirect(request, '/member/0/introduction' if i >= len(HOUSEHOLD_PAGES) else '/household/{}'.format(HOUSEHOLD_PAGES[i]))
 
@@ -297,7 +338,7 @@ async def handle_member_post(request):
     else:
         answers = await parse_answers(request, group_instance)
 
-    answers = update_answers(request, answers)
+    answers = await update_answers(request, answers)
 
     if page == 'private-response':
         data = await request.post()
@@ -324,7 +365,7 @@ async def handle_member(request):
     page = request.match_info['page']
 
     storage_key = StorageEncryption._generate_key(request.cookies['user_id'], request.cookies['user_ik'], PEPPER)
-    answers = get_answers(request.cookies['user_id'], storage_key)
+    answers = await get_answers(request.cookies['user_id'], storage_key)
 
     first_name = answers[ak('first-name', group_instance, 0)]
     middle_names = answers[ak('middle-names', group_instance, 0)]
@@ -336,7 +377,7 @@ async def handle_member(request):
 @routes.post('/visitors_introduction')
 async def handle_visitors_introduction_post(request):
     answers = await parse_answers(request, 0)
-    update_answers(request, answers)
+    await update_answers(request, answers)
     raise redirect(request, '/visitor/0/name')
 
 
@@ -355,7 +396,7 @@ async def handle_visitor_post(request):
     else:
         answers = await parse_answers(request, group_instance)
 
-    answers = update_answers(request, answers)
+    answers = await update_answers(request, answers)
 
     i = VISITOR_PAGES.index(page) + 1
     if i < len(VISITOR_PAGES):
@@ -379,7 +420,7 @@ async def handle_visitor(request):
 @routes.post('/visitors_completed')
 async def handle_visitors_completed_post(request):
     answers = await parse_answers(request, 0)
-    update_answers(request, answers)
+    await update_answers(request, answers)
     raise redirect(request, '/completed')
 
 
@@ -408,7 +449,7 @@ async def handle_thank_you(request):
 @routes.get('/dump/submission')
 async def get_submission(request):
     storage_key = StorageEncryption._generate_key(request.cookies['user_id'], request.cookies['user_ik'], PEPPER)
-    answers = get_answers(request.cookies['user_id'], storage_key)
+    answers = await get_answers(request.cookies['user_id'], storage_key)
 
     flat_answers = []
 
@@ -465,11 +506,11 @@ def decrypt_data(key, encrypted_token):
     return ujson.loads(jwe_token.payload.decode())
 
 
-def update_answers(request, new_answers):
+async def update_answers(request, new_answers):
     storage_key = StorageEncryption._generate_key(request.cookies['user_id'], request.cookies['user_ik'], PEPPER)
-    answers = get_answers(request.cookies['user_id'], storage_key)
+    answers = await get_answers(request.cookies['user_id'], storage_key)
     answers.update(new_answers)
-    put_answers(request.cookies['user_id'], answers, storage_key)
+    await put_answers(request.cookies['user_id'], answers, storage_key)
     return answers
 
 
