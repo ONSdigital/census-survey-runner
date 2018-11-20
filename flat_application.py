@@ -1,3 +1,8 @@
+import logging;logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.ERROR,
+    datefmt='%Y-%m-%d %H:%M:%S')
+
 import datetime
 from asyncio import ensure_future
 

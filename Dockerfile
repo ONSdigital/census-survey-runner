@@ -1,4 +1,4 @@
-FROM python:3.7
+FROM pypy:3-6
 
 RUN pip install pipenv==2018.10.9
 
@@ -12,6 +12,6 @@ RUN pipenv install --deploy --system
 
 EXPOSE 5000
 
-ENTRYPOINT ["python", "-u", "flat_application.py"]
+ENTRYPOINT ["pypy3", "-u", "flat_application.py"]
 
 COPY . /usr/src/app
