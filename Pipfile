@@ -12,7 +12,7 @@ aiodns = "*"
 cchardet = "*"
 Jinja2 = "*"
 structlog = "*"
-idna_ssl = "*"
+uvloop = "*"
 
 [requires]
 python_version = "3.7"

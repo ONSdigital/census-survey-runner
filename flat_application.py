@@ -1,3 +1,6 @@
+import asyncio
+
+import uvloop
 from cryptography.hazmat.backends import default_backend
 
 from cryptography.hazmat.primitives.ciphers import modes, algorithms, Cipher
@@ -584,6 +587,7 @@ def render_template(template_name, **kwargs):
 
 
 if __name__ == '__main__':
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     app = web.Application()
     app.add_routes(routes)
     app.router.add_static('/static/', 'static')
