@@ -28,6 +28,25 @@ from app.storage.metadata_parser import parse_runner_claims
 from app.storage.storage_encryption import StorageEncryption
 
 
+encryption_type = os.getenv('EQ_ENCRYPTION_TYPE')
+if encryption_type == 'none':
+    def encrypt_data(key, data):
+        return ujson.dumps(data)
+
+    def decrypt_data(key, encrypted_token):
+        return ujson.loads(encrypted_token)
+else:
+    def encrypt_data(key, data):
+        jwe_token = jwe.JWE(plaintext=ujson.dumps(data), protected={'alg': 'dir', 'enc': 'A256GCM', 'kid': '1,1'})
+        jwe_token.add_recipient(key)
+        return jwe_token.serialize(compact=True)
+
+    def decrypt_data(key, encrypted_token):
+        jwe_token = jwe.JWE(algs=['dir', 'A256GCM'])
+        jwe_token.deserialize(encrypted_token, key)
+        return ujson.loads(jwe_token.payload.decode())
+
+
 storage_backend = os.getenv('EQ_STORAGE_BACKEND')
 if storage_backend == 'gcs':
     class ComputeEngineToken(Token):
@@ -101,7 +120,6 @@ if storage_backend == 'gcs':
                 return {}
 
             raise e
-
 
     @backoff.on_exception(backoff.expo, Exception, max_tries=10)
     async def put_answers(user_id, answers, key):
@@ -497,18 +515,6 @@ async def get_submission(request):
 @routes.get('/status')
 async def handle_status(request):
     return web.Response(text='ok')
-
-
-def encrypt_data(key, data):
-    jwe_token = jwe.JWE(plaintext=ujson.dumps(data), protected={'alg': 'dir', 'enc': 'A256GCM', 'kid': '1,1'})
-    jwe_token.add_recipient(key)
-    return jwe_token.serialize(compact=True)
-
-
-def decrypt_data(key, encrypted_token):
-    jwe_token = jwe.JWE(algs=['dir', 'A256GCM'])
-    jwe_token.deserialize(encrypted_token, key)
-    return ujson.loads(jwe_token.payload.decode())
 
 
 async def update_answers(request, new_answers):
