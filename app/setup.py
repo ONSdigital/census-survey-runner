@@ -7,6 +7,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 import boto3
+import requests
 import sqlalchemy
 import yaml
 from botocore.config import Config
@@ -15,6 +16,8 @@ from flask_babel import Babel
 from flask_talisman import Talisman
 from flask_themes2 import Themes
 from flask_wtf.csrf import CSRFProtect
+import google.auth
+from google.auth.transport.requests import AuthorizedSession
 from google.cloud import bigtable
 from google.cloud import storage
 from sdc.crypto.key_store import KeyStore, validate_required_keys
@@ -279,7 +282,9 @@ def setup_bigtable(application):
 
 def setup_gcs(application):
     if application.config['EQ_STORAGE_BACKEND'] == 'gcs':
-        client = storage.Client()
+        gcs_session = AuthorizedSession(google.auth.default()[0])
+        gcs_session.mount('https://', requests.adapters.HTTPAdapter(pool_maxsize=application.config['EQ_GCS_MAX_POOL_CONNECTIONS']))
+        client = storage.Client(_http=gcs_session)
         bucket = client.get_bucket(application.config['EQ_GCS_BUCKET_ID'])
 
         application.eq['gcsbucket'] = bucket
