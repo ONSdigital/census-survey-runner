@@ -1,3 +1,8 @@
+from cryptography.hazmat.backends import default_backend
+
+from cryptography.hazmat.primitives.ciphers import modes, algorithms, Cipher
+
+from jwcrypto.common import base64url_decode
 import logging;logging.basicConfig(
     format='%(asctime)s %(levelname)-8s %(message)s',
     level=logging.ERROR,
@@ -35,6 +40,20 @@ if encryption_type == 'none':
 
     def decrypt_data(key, encrypted_token):
         return ujson.loads(encrypted_token)
+elif encryption_type == 'aesgcm':
+    def encrypt_data(key, data):
+        key = base64url_decode(key.get_op_key('encrypt'))
+        iv = os.urandom(12)
+        encryptor = Cipher(algorithms.AES(key), modes.GCM(iv), backend=default_backend()).encryptor()
+        ciphertext = encryptor.update(ujson.dumps(data).encode()) + encryptor.finalize()
+        return iv + encryptor.tag + ciphertext
+
+    def decrypt_data(key, encrypted_token):
+        key = base64url_decode(key.get_op_key('encrypt'))
+        iv = encrypted_token[:12]
+        tag = encrypted_token[12:28]
+        decryptor = Cipher(algorithms.AES(key), modes.GCM(iv, tag), backend=default_backend()).decryptor()
+        return ujson.loads(decryptor.update(encrypted_token[28:]) + decryptor.finalize())
 else:
     def encrypt_data(key, data):
         jwe_token = jwe.JWE(plaintext=ujson.dumps(data), protected={'alg': 'dir', 'enc': 'A256GCM', 'kid': '1,1'})
@@ -108,6 +127,7 @@ if storage_backend == 'gcs':
         storage = Storage(project, None, token=token, session=session)
     else:
         storage = Storage(project, creds, session=session)
+    # TODO storage tries to convert bytes to str before storing
 
 
     @backoff.on_exception(backoff.expo, Exception, max_tries=10)
