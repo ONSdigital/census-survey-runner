@@ -13,6 +13,7 @@ cchardet = "*"
 Jinja2 = "*"
 structlog = "*"
 uvloop = "*"
+multidict = "==4.4.2"
 
 [requires]
 python_version = "3.7"
