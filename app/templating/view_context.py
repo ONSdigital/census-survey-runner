@@ -1,3 +1,4 @@
+import copy
 from flask_wtf import FlaskForm
 from app.jinja_filters import format_currency, format_number, format_unit, format_percentage
 from app.helpers.form_helper import get_form_for_location
@@ -184,7 +185,7 @@ def _build_calculated_summary_section_list(schema, rendered_block, group_id):
 
 
 def _remove_unwanted_questions_answers(block, answers_in_block, answer_ids_to_keep):
-    reduced_block = block.copy()
+    reduced_block = copy.deepcopy(block)
     questions_to_keep = [
         answer['parent_id'] for answer in answers_in_block.values() if answer['id'] in answer_ids_to_keep
     ]

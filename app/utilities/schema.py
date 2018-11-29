@@ -1,5 +1,4 @@
 import os
-from copy import deepcopy
 
 import requests
 import simplejson as json
@@ -35,7 +34,7 @@ def load_schema_from_params(eq_id, form_type, language_code=None):
 
         schema_cache[cache_key] = QuestionnaireSchema(schema_json, language_code)
 
-    return deepcopy(schema_cache[cache_key])
+    return schema_cache[cache_key]
 
 
 def _load_schema_file(schema_file, language_code):
@@ -80,7 +79,7 @@ def load_schema_from_url(survey_url, language_code):
 
         url_schema_cache[cache_key] = QuestionnaireSchema(json.loads(schema_response), language_code)
 
-    return deepcopy(url_schema_cache[cache_key])
+    return url_schema_cache[cache_key]
 
 
 def get_schema_path(language_code, schema_dir=DEFAULT_SCHEMA_DIR):
@@ -90,3 +89,7 @@ def get_schema_path(language_code, schema_dir=DEFAULT_SCHEMA_DIR):
 def get_schema_file_path(schema_file, language_code):
     schema_dir = get_schema_path(language_code)
     return os.path.join(schema_dir, schema_file)
+
+
+def clear_schema_cache():
+    schema_cache.clear()

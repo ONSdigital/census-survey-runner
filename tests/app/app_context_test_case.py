@@ -5,6 +5,7 @@ from flask import current_app
 
 from app import flask_theme_cache
 from app.setup import create_app
+from app.utilities import schema as schema_utils
 from app.storage.dynamodb_api import TABLE_CONFIG
 
 with warnings.catch_warnings():
@@ -45,6 +46,7 @@ class AppContextTestCase(unittest.TestCase):
         self._ddb.stop()
 
         flask_theme_cache.clear()
+        schema_utils.clear_schema_cache()
 
     def app_request_context(self, *args, **kwargs):
         return self._app.test_request_context(*args, **kwargs)

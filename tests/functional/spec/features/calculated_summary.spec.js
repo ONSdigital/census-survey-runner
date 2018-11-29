@@ -13,7 +13,7 @@ const NumberTotalPlaybackPage = require('../../pages/features/calculated_summary
 const SummaryPage = require('../../pages/summary.page.js');
 const ThankYouPage = require('../../pages/thank-you.page.js');
 
-describe('@watch Feature: Calculated Summary', function() {
+describe('Feature: Calculated Summary', function() {
 
   describe('Given I have a Calculated Summary', function() {
 
