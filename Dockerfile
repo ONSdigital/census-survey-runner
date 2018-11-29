@@ -1,6 +1,7 @@
 FROM python:3.7
 
 RUN pip install pipenv==2018.10.9
+RUN apt update && apt install -y libsnappy-dev
 
 RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
