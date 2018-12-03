@@ -192,17 +192,17 @@ LIST_ANSWERS = {
 }
 
 MEMBERS_PAGES = [
-    'introduction',
+    'who-lives-here-block',
     'permanent-or-family-home',
     'household-composition',
     'everyone-at-address-confirmation',
     'overnight-visitors',
     'household-relationships',
-    'completed'
+    'who-lives-here-completed'
 ]
 
 HOUSEHOLD_PAGES = [
-    'introduction',
+    'household-and-accommodation-block',
     'type-of-accommodation',
     'type-of-house',
     'self-contained-accommodation',
@@ -210,11 +210,11 @@ HOUSEHOLD_PAGES = [
     'central-heating',
     'own-or-rent',
     'number-of-vehicles',
-    'completed'
+    'household-and-accommodation-completed'
 ]
 
 MEMBER_PAGES = [
-    'introduction',
+    'household-member-begin-section',
     'details-correct',
     'over-16',
     'private-response',
@@ -251,16 +251,16 @@ MEMBER_PAGES = [
     'main-job-type',
     'business-name',
     'employers-business',
-    'completed'
+    'household-member-completed'
 ]
 
 VISITOR_PAGES = [
-    'name',
-    'sex',
-    'date-of-birth',
-    'uk-resident',
-    'address',
-    'completed'
+    'visitor-name',
+    'visitor-sex',
+    'visitor-date-of-birth',
+    'visitor-uk-resident',
+    'visitor-address',
+    'visitor-completed'
 ]
 
 
@@ -293,7 +293,7 @@ async def create_fake_session(request):
 async def handle_introduction_post(request):
     answers = await parse_answers(request, 0)
     await update_answers(request, answers)
-    raise redirect(request, '/address')
+    raise redirect(request, '/what-is-your-address')
 
 
 @routes.get('/introduction')
@@ -301,16 +301,16 @@ async def handle_introduction(request):
     return render_template('introduction.html')
 
 
-@routes.post('/address')
+@routes.post('/what-is-your-address')
 async def handle_address_post(request):
     answers = await parse_answers(request, 0)
     await update_answers(request, answers)
-    raise redirect(request, '/members/introduction')
+    raise redirect(request, '/members/who-lives-here-block')
 
 
-@routes.get('/address')
+@routes.get('/what-is-your-address')
 async def handle_address(request):
-    return render_template('address.html')
+    return render_template('what-is-your-address.html')
 
 
 @routes.post('/members/{page}')
@@ -338,7 +338,7 @@ async def handle_members_post(request):
 
     await update_answers(request, answers)
     i = MEMBERS_PAGES.index(page) + 1
-    raise redirect(request, '/household/introduction' if i >= len(MEMBERS_PAGES) else '/members/{}'.format(MEMBERS_PAGES[i]))
+    raise redirect(request, '/household/household-and-accommodation-block' if i >= len(MEMBERS_PAGES) else '/members/{}'.format(MEMBERS_PAGES[i]))
 
 
 @routes.get('/members/{page}')
@@ -365,7 +365,7 @@ async def handle_household_post(request):
     answers = await parse_answers(request, 0)
     await update_answers(request, answers)
     i = HOUSEHOLD_PAGES.index(page) + 1
-    raise redirect(request, '/member/0/introduction' if i >= len(HOUSEHOLD_PAGES) else '/household/{}'.format(HOUSEHOLD_PAGES[i]))
+    raise redirect(request, '/member/0/household-member-begin-section' if i >= len(HOUSEHOLD_PAGES) else '/household/{}'.format(HOUSEHOLD_PAGES[i]))
 
 
 @routes.get('/household/{page}')
@@ -393,7 +393,7 @@ async def handle_member_post(request):
             raise redirect(request, '/member/{}/request-private-response'.format(group_instance))
 
     if page == 'request-private-response':
-        raise redirect(request, '/member/{}/completed'.format(group_instance))
+        raise redirect(request, '/member/{}/household-member-completed'.format(group_instance))
 
     i = MEMBER_PAGES.index(page) + 1
     if i < len(MEMBER_PAGES):
@@ -404,11 +404,11 @@ async def handle_member_post(request):
     group_instance += 1
 
     if group_instance < num_members:
-        raise redirect(request, '/member/{}/introduction'.format(group_instance))
+        raise redirect(request, '/member/{}/household-member-begin-section'.format(group_instance))
 
     num_visitors = answers[ak('overnight-visitors-answer', 0, 0)]
     if num_visitors > 0:
-        raise redirect(request, '/visitors_introduction')
+        raise redirect(request, '/visitor-begin-section')
 
     raise redirect(request, '/completed')
 
@@ -428,16 +428,16 @@ async def handle_member(request):
     return render_template('member/{}.html'.format(page), first_name=first_name, middle_names=middle_names, last_name=last_name)
 
 
-@routes.post('/visitors_introduction')
+@routes.post('/visitor-begin-section')
 async def handle_visitors_introduction_post(request):
     answers = await parse_answers(request, 0)
     await update_answers(request, answers)
-    raise redirect(request, '/visitor/0/name')
+    raise redirect(request, '/visitor/0/visitor-name')
 
 
-@routes.get('/visitors_introduction')
+@routes.get('/visitor-begin-section')
 async def handle_visitors_introduction(request):
-    return render_template('visitors_introduction.html')
+    return render_template('visitor-begin-section.html')
 
 
 @routes.post('/visitor/{group_instance}/{page}')
@@ -461,9 +461,9 @@ async def handle_visitor_post(request):
     group_instance += 1
 
     if group_instance < num_visitors:
-        raise redirect(request, '/visitor/{}/name'.format(group_instance))
+        raise redirect(request, '/visitor/{}/visitor-name'.format(group_instance))
 
-    raise redirect(request, '/visitors_completed')
+    raise redirect(request, '/visitors-completed')
 
 
 @routes.get('/visitor/{group_instance}/{page}')
@@ -474,28 +474,28 @@ async def handle_visitor(request):
     return render_template('visitor/{}.html'.format(page), group_instance=group_instance)
 
 
-@routes.post('/visitors_completed')
+@routes.post('/visitors-completed')
 async def handle_visitors_completed_post(request):
     answers = await parse_answers(request, 0)
     await update_answers(request, answers)
-    raise redirect(request, '/completed')
+    raise redirect(request, '/confirmation')
 
 
-@routes.get('/visitors_completed')
+@routes.get('/visitors-completed')
 async def handle_visitors_completed(request):
-    return render_template('visitors_completed.html')
+    return render_template('visitors-completed.html')
 
 
-@routes.post('/completed')
+@routes.post('/confirmation')
 async def handle_completed_post(request):
     print('Submitting answers')
     # TODO validate and submit answers
     raise redirect(request, '/thank-you')
 
 
-@routes.get('/completed')
+@routes.get('/confirmation')
 async def handle_completed(request):
-    return render_template('completed.html')
+    return render_template('confirmation.html')
 
 
 @routes.get('/thank-you')
