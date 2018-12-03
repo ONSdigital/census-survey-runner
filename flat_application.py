@@ -403,7 +403,14 @@ async def handle_member_post(request):
 
     group_instance += 1
 
-    raise redirect(request, '/visitors_introduction' if group_instance >= num_members else '/member/{}/introduction'.format(group_instance))
+    if group_instance < num_members:
+        raise redirect(request, '/member/{}/introduction'.format(group_instance))
+
+    num_visitors = answers[ak('overnight-visitors-answer', 0, 0)]
+    if num_visitors > 0:
+        raise redirect(request, '/visitors_introduction')
+
+    raise redirect(request, '/completed')
 
 
 @routes.get('/member/{group_instance}/{page}')
@@ -453,7 +460,10 @@ async def handle_visitor_post(request):
 
     group_instance += 1
 
-    raise redirect(request, '/visitors_completed' if group_instance >= num_visitors else '/visitor/{}/name'.format(group_instance))
+    if group_instance < num_visitors:
+        raise redirect(request, '/visitor/{}/name'.format(group_instance))
+
+    raise redirect(request, '/visitors_completed')
 
 
 @routes.get('/visitor/{group_instance}/{page}')
