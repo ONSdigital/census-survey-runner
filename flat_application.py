@@ -410,7 +410,7 @@ async def handle_member_post(request):
     if num_visitors > 0:
         raise redirect(request, '/visitor-begin-section')
 
-    raise redirect(request, '/completed')
+    raise redirect(request, '/confirmation')
 
 
 @routes.get('/member/{group_instance}/{page}')
