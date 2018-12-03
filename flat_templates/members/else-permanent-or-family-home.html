@@ -1,0 +1,303 @@
+{% include 'partials/header.html' %}
+
+        <div class="page__subheader">
+          <div class="container">
+
+    <div id="feedback-display" class="feedback__action js-feedback-action"><span class="badge badge--blue u-mr-xs">Beta</span><span class="pluto">This is a new service. <a href="/feedback" target="_blank" rel="noopener noreferrer" class="feedback__open js-feedback-open" data-qa="a-feedback-open"
+   data-ga="click" data-ga-category="Feedback" data-ga-action="Open feedback link click">Help us improve it</a>.</span></div>
+<div id="feedback-thanks" class="feedback__thanks js-feedback-thanks u-hidden"><span class="badge badge--blue u-mr-xs">Beta</span><span class="pluto">Thanks for your feedback.</span></div>
+    <div class="feedback__inline js-feedback-inline is-collapsed">
+    <div class="feedback__border">
+        <form id="feedback-form" method="POST" class="feedback__form">
+    <input id="csrf_token" name="csrf_token" type="hidden" value="IjFkNDdhYWVlN2I0MWNkYjE4MmI5YjE0MmI3OGFhMGM2MjQ5YzM0ZmEi.XAU_FA.MECVFL61ZgNLBQPnsBzNmv-5i40">
+    <div class="group">
+        <div class="feedback__field">
+            <label id="feedback-message-label" class="label venus" for="feedback-message">How can we improve this survey?</label>
+            <textarea class="input input--textarea js-charlimit-input js-feedback-message" name="message" id="feedback-message" rows="8" cols="60" maxlength="2000"></textarea>
+            <div id="feedback-message-remaining" class="input__limit u-mt-xs mercury">Characters remaining: <span>-</span></div>
+        </div>
+        <div class="feedback__field">
+            <label id="feedback-name-label" class="label venus" for="feedback-name">
+                <div class="label__inner">
+                    Name (optional)
+                    <br />
+                    <span class="label__description pluto">Please include your name and email address if you’re interested in taking part in further research to improve this survey</span>
+                </div>
+            </label>
+            <input type="text" class="input js-feedback-name" name="name" id="feedback-name" value=""/>
+        </div>
+        <div class="feedback__field">
+            <label id="feedback-email-label" class="label venus" for="feedback-email">Email address (optional)</label>
+            <input type="text" class="input js-feedback-email" name="email" id="feedback-email" value=""/>
+        </div>
+    </div>
+    <button class="btn js-feedback-submit" type="submit" name="action[send_feedback]" data-qa="btn-feedback-submit" data-ga="click" data-ga-category="Feedback" data-ga-action="Send">Send feedback</button>
+</form>
+        <button class="btn btn--secondary feedback__cancel js-feedback-cancel" data-qa="a-feedback-close"
+   data-ga="click" data-ga-category="Feedback" data-ga-action="Cancel feedback link click">I don’t want to provide feedback</button>
+    </div>
+</div>
+
+
+
+  <a class="page__previous page__previous--top"
+
+   data-ga="click" data-ga-category="Navigation" data-ga-action="Previous link click" data-ga-label="top"
+  href="/questionnaire/census/household/8e61ea37-2aa8-4f51-b861-c2c14383b641/who-lives-here/0/permanent-or-family-home" id="top-previous">Previous</a>
+
+
+              <div class="page__menubtn">
+              <button class="btn btn--menu js-menu-btn " data-close-label="Hide sections" type="button" id="menu-btn" aria-expanded="false" aria-controls="section-nav" aria-label="Toggle section menu" aria-haspopup="true">View sections</button>
+              </div>
+
+
+
+          </div>
+        </div>
+
+        <div class="page__container container">
+
+
+<div class="grid grid--reverse">
+  <div class="grid__col col-4@m">
+
+
+
+<nav class="nav nav--sections nav--vertical js-nav page__nav" id="section-nav" aria-labelledby="menu-btn" role="menu">
+  <p class="nav__title venus">Sections</p>
+  <ul class="nav__list js-nav-list">
+
+    <li class="nav__item  pluto nav__item--completed ">
+        <a class="nav__link"   role="menuitem" href="/questionnaire/census/household/8e61ea37-2aa8-4f51-b861-c2c14383b641/what-is-your-address-group/0/introduction" data-qa="complete"
+
+   data-ga="click" data-ga-category="Navigation" data-ga-action="Section link click" data-ga-label="/questionnaire/census/household/8e61ea37-2aa8-4f51-b861-c2c14383b641/what-is-your-address-group/0/introduction">Introduction</a>
+      </li>
+
+    <li class="nav__item  pluto  nav__item--current">
+        <a class="nav__link"  aria-label="Who lives here?. This is the current page" role="menuitem" href="/questionnaire/census/household/8e61ea37-2aa8-4f51-b861-c2c14383b641/who-lives-here/0/else-permanent-or-family-home" data-qa="incomplete"
+
+   data-ga="click" data-ga-category="Navigation" data-ga-action="Section link click" data-ga-label="/questionnaire/census/household/8e61ea37-2aa8-4f51-b861-c2c14383b641/who-lives-here/0/else-permanent-or-family-home">Who lives here?</a>
+      </li>
+
+    <li class="nav__item  pluto  ">
+        <a class="nav__link"   role="menuitem" href="/questionnaire/census/household/8e61ea37-2aa8-4f51-b861-c2c14383b641/household-and-accommodation/0/household-and-accommodation-block" data-qa="incomplete"
+
+   data-ga="click" data-ga-category="Navigation" data-ga-action="Section link click" data-ga-label="/questionnaire/census/household/8e61ea37-2aa8-4f51-b861-c2c14383b641/household-and-accommodation/0/household-and-accommodation-block">Household and Accommodation</a>
+      </li>
+
+  </ul>
+</nav>
+
+
+  </div>
+
+  <div class="grid__col col-7@m pull-1@m">
+    <main role="main" id="main" class="page__main">
+
+
+
+
+
+
+    <form class="form qa-questionnaire-form" role="form" method="POST" autocomplete="off" novalidate>
+      <input id="csrf_token" name="csrf_token" type="hidden" value="IjFkNDdhYWVlN2I0MWNkYjE4MmI5YjE0MmI3OGFhMGM2MjQ5YzM0ZmEi.XAU_FA.MECVFL61ZgNLBQPnsBzNmv-5i40">
+
+
+        <div class="group" id="who-lives-here">
+
+
+<div class="block" id="else-permanent-or-family-home">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="question" id="else-permanent-or-family-home-question">
+
+
+
+
+
+
+
+
+
+      <h1 class="question__title saturn" data-qa="question-title">
+      Can you confirm no one lives here as their permanent or family home?
+    </h1>
+
+
+
+
+    <aside class="question__guidance">
+      <div class="panel panel--simple panel--info" id="question-guidance-else-permanent-or-family-home-question">
+
+
+<strong class="u-mb-s u-d-b">This could be:</strong>
+  <ul class="mars"><li>people who usually live outside the UK who are staying in the UK for <b>three months or more</b></li>
+      <li>people who work away from home within the UK if this is their permanent or family home</li>
+      <li>members of the Armed Forces if this is their permanent or family home</li>
+      <li>people who are temporarily outside the UK for <b>less than 12 months</b></li>
+      <li>people staying temporarily who usually live in the UK but do not have another UK address, for example relatives, friends</li>
+      <li>other people who usually live here, including anyone temporarily away from home </li>
+
+    </ul>
+
+
+      </div>
+    </aside>
+
+
+
+ <div class="question__answers">
+      <div class="question__answer">
+
+
+
+
+<div class="answer answer--radio  " id="container-else-permanent-or-family-home-answer">
+
+
+
+    <div class="answer__fields js-fields">
+
+
+
+
+<div class="field field--radio field--multiplechoice ">
+  <fieldset>
+
+  <legend class="field__legend mars u-vh">
+    Can you confirm no one lives here as their permanent or family home?</legend>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <div class="field__item js-focusable-box">
+      <input  class="input input--radio js-focusable " type="radio" value="Someone lives here as their permanent home" name="else-permanent-or-family-home-answer" id="else-permanent-or-family-home-answer-0">
+      <label  class="label label--inline venus" for="else-permanent-or-family-home-answer-0" id="label-else-permanent-or-family-home-answer-0">
+
+            Someone lives here as their permanent home
+
+
+
+      </label>
+
+
+
+
+    </div>
+
+
+
+
+
+
+
+
+
+
+
+
+    <div class="field__item js-focusable-box">
+      <input  class="input input--radio js-focusable " type="radio" value="No one lives here as their permanent home" name="else-permanent-or-family-home-answer" id="else-permanent-or-family-home-answer-1">
+      <label  class="label label--inline venus" for="else-permanent-or-family-home-answer-1" id="label-else-permanent-or-family-home-answer-1">
+
+            No one lives here as their permanent home
+
+
+
+      </label>
+
+
+
+
+    </div>
+
+
+</fieldset>
+</div>
+    </div>
+
+
+
+
+
+</div>
+      </div>
+     </div>
+
+
+
+
+
+
+
+
+
+</div>
+
+
+</div>
+        </div>
+
+
+
+      <button class="btn" data-qa="btn-submit" type="submit" name="action[save_continue]">Save and continue</button>
+
+
+      <div class="u-mb-m">
+        <button class="btn btn--secondary js-btn-save" data-qa="btn-save-sign-out" type="submit" name="action[save_sign_out]"
+   data-ga="click" data-ga-category="Navigation" data-ga-action="Save and complete later click">Save and complete later</button>
+      </div>
+    </form>
+
+
+
+
+
+  <a class="page__previous page__previous--bottom"
+
+   data-ga="click" data-ga-category="Navigation" data-ga-action="Previous link click" data-ga-label="bottom"
+  href="/questionnaire/census/household/8e61ea37-2aa8-4f51-b861-c2c14383b641/who-lives-here/0/permanent-or-family-home" id="bottom-previous">Previous</a>
+
+
+    </main>
+  </div>
+</div>
+
+
+        </div>
+      </div>
+
+{% include 'partials/footer.html' %}

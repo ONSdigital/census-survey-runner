@@ -336,9 +336,32 @@ async def handle_members_post(request):
     else:
         answers = await parse_answers(request, 0)
 
-    await update_answers(request, answers)
+    answers = await update_answers(request, answers)
+
+    if page == 'permanent-or-family-home':
+        data = await request.post()
+        if data['permanent-or-family-home-answer'] == 'No':
+            raise redirect(request, '/members/else-permanent-or-family-home')
+
+    if page == 'else-permanent-or-family-home':
+        data = await request.post()
+        if data['else-permanent-or-family-home-answer'].startswith('Someone'):
+            raise redirect(request, '/members/household-composition')
+
+        raise redirect(request, '/members/overnight-visitors')
+
     i = MEMBERS_PAGES.index(page) + 1
-    raise redirect(request, '/household/household-and-accommodation-block' if i >= len(MEMBERS_PAGES) else '/members/{}'.format(MEMBERS_PAGES[i]))
+
+    if i >= len(MEMBERS_PAGES):
+        raise redirect(request, '/household/household-and-accommodation-block')
+
+    num_members = len([a for a in answers.keys() if a.startswith('first-name-')])
+    next_page = MEMBERS_PAGES[i]
+
+    if next_page == 'household-relationships' and num_members == 0:
+        next_page = 'who-lives-here-completed'
+
+    raise redirect(request, '/members/{}'.format(next_page))
 
 
 @routes.get('/members/{page}')
