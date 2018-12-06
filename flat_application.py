@@ -157,6 +157,15 @@ else:
     async def put_answers(user_id, answers, key):
         storage[user_id] = encrypt_data(key, answers)
 
+storage_backend = os.getenv('EQ_SUBMITTER')
+if storage_backend == 'gcs':
+    @backoff.on_exception(backoff.expo, Exception, max_tries=10)
+    async def put_submission(user_id, answers, key):
+        await storage.upload(os.getenv('EQ_GCS_SUBMISSION_BUCKET_ID'), 'flat/' + user_id, encrypt_data(key, answers))
+else:
+    async def put_submission(user_id, answers, key):
+        print('Submitting answers')
+
 with open(os.getenv('EQ_KEYS_FILE', 'keys.yml')) as f:
     key_store = KeyStore(yaml.safe_load(f))
 
@@ -511,8 +520,10 @@ async def handle_visitors_completed(request):
 
 @routes.post('/confirmation')
 async def handle_completed_post(request):
-    print('Submitting answers')
-    # TODO validate and submit answers
+    user_id = request.cookies['user_id']
+    storage_key = StorageEncryption._generate_key(request.cookies['user_id'], request.cookies['user_ik'], PEPPER)
+    answers = await get_answers(user_id, storage_key)
+    await put_submission(user_id, answers, storage_key)
     raise redirect(request, '/thank-you')
 
 
