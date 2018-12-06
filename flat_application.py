@@ -212,9 +212,7 @@ MEMBERS_PAGES = [
     'permanent-or-family-home',
     'household-composition',
     'everyone-at-address-confirmation',
-    'overnight-visitors',
-    'household-relationships',
-    'who-lives-here-completed'
+    'overnight-visitors'
 ]
 
 HOUSEHOLD_PAGES = [
@@ -341,14 +339,6 @@ async def handle_members_post(request):
                 _, answer_instance, k = k.split('-', 2)
                 answer_instance = int(answer_instance)
                 answers[ak(k, answer_instance, 0)] = v
-    elif page == 'household-relationships':
-        answers = {}
-        data = await request.post()
-        for k, v in data.items():
-            if k.startswith('household-relationships-answer-'):
-                _, answer_instance = k.rsplit('-', 1)
-                answer_instance = int(answer_instance)
-                answers[ak('household-relationships-answer', answer_instance, 0)] = v
     else:
         answers = await parse_answers(request, 0)
 
@@ -369,13 +359,14 @@ async def handle_members_post(request):
     i = MEMBERS_PAGES.index(page) + 1
 
     if i >= len(MEMBERS_PAGES):
-        raise redirect(request, '/household/household-and-accommodation-block')
+        num_members = len([a for a in answers.keys() if a.startswith('first-name-')])
 
-    num_members = len([a for a in answers.keys() if a.startswith('first-name-')])
+        if num_members < 2:
+            raise redirect(request, '/who-lives-here-completed')
+
+        raise redirect(request, '/relationship/0/household-relationships')
+
     next_page = MEMBERS_PAGES[i]
-
-    if next_page == 'household-relationships' and num_members == 0:
-        next_page = 'who-lives-here-completed'
 
     raise redirect(request, '/members/{}'.format(next_page))
 
@@ -395,6 +386,48 @@ async def handle_members(request):
     address_line_1 = answers[ak('address-line-1', 0, 0)]
 
     return render_template('members/{}.html'.format(page), members=members, address_line_1=address_line_1)
+
+
+@routes.post('/relationship/{i}/household-relationships')
+async def handle_household_relationships_post(request):
+    i = int(request.match_info['i'])
+
+    answers = {}
+    data = await request.post()
+    for k, v in data.items():
+        if k.startswith('household-relationships-answer-'):
+            _, answer_instance = k.rsplit('-', 1)
+            answer_instance = int(answer_instance)
+            answers[ak('household-relationships-answer', answer_instance, i)] = v
+
+    answers = await update_answers(request, answers)
+
+    num_members = len([a for a in answers.keys() if a.startswith('first-name-')])
+    num_relationship_pages = num_members - 1
+
+    i += 1
+
+    if i >= num_relationship_pages:
+        raise redirect(request, '/who-lives-here-completed')
+
+    raise redirect(request, '/relationship/{}/household-relationships'.format(i))
+
+
+@routes.get('/relationship/{i}/household-relationships')
+async def handle_household_relationships(request):
+    return render_template('household-relationships.html')
+
+
+@routes.post('/who-lives-here-completed')
+async def handle_who_lives_here_completed_post(request):
+    answers = await parse_answers(request, 0)
+    await update_answers(request, answers)
+    raise redirect(request, '/household/household-and-accommodation-block')
+
+
+@routes.get('/who-lives-here-completed')
+async def handle_who_lives_here_completed(request):
+    return render_template('who-lives-here-completed.html')
 
 
 @routes.post('/household/{page}')
