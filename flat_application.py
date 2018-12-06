@@ -148,6 +148,10 @@ if storage_backend == 'gcs':
     @backoff.on_exception(backoff.expo, Exception, max_tries=10)
     async def put_answers(user_id, answers, key):
         await storage.upload(os.getenv('EQ_GCS_BUCKET_ID'), 'flat/' + user_id, encrypt_data(key, answers))
+
+    @backoff.on_exception(backoff.expo, Exception, max_tries=10)
+    async def delete_answers(user_id):
+        await storage.delete(os.getenv('EQ_GCS_BUCKET_ID'), 'flat/' + user_id)
 else:
     storage = {}
 
@@ -156,6 +160,9 @@ else:
 
     async def put_answers(user_id, answers, key):
         storage[user_id] = encrypt_data(key, answers)
+
+    async def delete_answers(user_id):
+        del storage[user_id]
 
 storage_backend = os.getenv('EQ_SUBMITTER')
 if storage_backend == 'gcs':
@@ -524,6 +531,7 @@ async def handle_completed_post(request):
     storage_key = StorageEncryption._generate_key(request.cookies['user_id'], request.cookies['user_ik'], PEPPER)
     answers = await get_answers(user_id, storage_key)
     await put_submission(user_id, answers, storage_key)
+    await delete_answers(user_id)
     raise redirect(request, '/thank-you')
 
 
