@@ -7,6 +7,7 @@ from app.storage import (
     s3_api,
     redis_api,
     gcs_api,
+    gc_datastore_api,
 )
 
 STORAGE_BACKENDS = {
@@ -16,6 +17,7 @@ STORAGE_BACKENDS = {
     'bigtable': bigtable_api,
     'redis': redis_api,
     'gcs': gcs_api,
+    'gc_datastore': gc_datastore_api,
 }
 
 

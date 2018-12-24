@@ -264,6 +264,12 @@ class TestCreateApp(unittest.TestCase):  # pylint: disable=too-many-public-metho
         application = create_app(self._setting_overrides)
         self.assertTrue(application.eq['gcsbucket'])
 
+    @patch('google.cloud.storage.Client')
+    def test_setup_gc_datastore(self, m_client):  # pylint: disable=unused-argument
+        self._setting_overrides['EQ_STORAGE_BACKEND'] = 'gc_datastore'
+        application = create_app(self._setting_overrides)
+        self.assertTrue(application.eq['gc_datastore'])
+
     def test_setup_sql(self):
         self._setting_overrides['EQ_STORAGE_BACKEND'] = 'sql'
 
