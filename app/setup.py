@@ -19,6 +19,7 @@ from flask_wtf.csrf import CSRFProtect
 import google.auth
 from google.auth.transport.requests import AuthorizedSession
 from google.cloud import bigtable
+from google.cloud import datastore
 from google.cloud import storage
 from sdc.crypto.key_store import KeyStore, validate_required_keys
 from structlog import get_logger
@@ -70,7 +71,7 @@ class AWSReverseProxied:
         return self.app(environ, start_response)
 
 
-def create_app(setting_overrides=None):  # noqa: C901  pylint: disable=too-complex
+def create_app(setting_overrides=None):  # noqa: C901  pylint: disable=too-complex,too-many-statements
     application = Flask(__name__, static_url_path='/s', static_folder='../static')
     application.config.from_object(settings)
 
@@ -107,6 +108,8 @@ def create_app(setting_overrides=None):  # noqa: C901  pylint: disable=too-compl
     setup_gcs(application)
 
     setup_redis(application)
+
+    setup_gc_datastore(application)
 
     if application.config['EQ_SUBMITTER'] == 'rabbitmq':
         application.eq['submitter'] = RabbitMQSubmitter(
@@ -288,6 +291,12 @@ def setup_gcs(application):
         bucket = client.get_bucket(application.config['EQ_GCS_BUCKET_ID'])
 
         application.eq['gcsbucket'] = bucket
+
+
+def setup_gc_datastore(application):
+    if application.config['EQ_STORAGE_BACKEND'] == 'gc_datastore':
+        client = datastore.Client(application.config['EQ_GC_DATASTORE_PROJECT_ID'], _use_grpc=False)
+        application.eq['gc_datastore'] = client
 
 
 def setup_profiling(application):
