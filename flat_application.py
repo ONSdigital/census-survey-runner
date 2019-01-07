@@ -127,8 +127,6 @@ if storage_backend in ('gcs', 'gc_datastore'):
             self.acquiring = None
             return True
 
-
-if storage_backend == 'gcs':
     project = os.getenv('GOOGLE_CLOUD_PROJECT')
     session = ClientSession(connector=TCPConnector(limit=int(os.getenv('EQ_GCS_MAX_POOL_CONNECTIONS', '30'))))
     creds = os.getenv('EQ_GCS_CREDENTIALS', 'META')
@@ -139,6 +137,8 @@ if storage_backend == 'gcs':
         storage = Storage(project, creds, session=session)
     # TODO storage tries to convert bytes to str before storing
 
+
+if storage_backend == 'gcs':
 
     @backoff.on_exception(backoff.expo, Exception, max_tries=10)
     async def get_answers(user_id, key):
