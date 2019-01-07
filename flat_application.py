@@ -18,6 +18,10 @@ from asyncio import ensure_future
 import backoff
 from aiohttp import web, ClientSession, ClientResponseError, TCPConnector
 from gcloud.aio.auth import Token
+from gcloud.aio.datastore.constants import Mode, Operation
+from gcloud.aio.datastore import Datastore
+from gcloud.aio.datastore import Key
+from gcloud.aio.datastore import PathElement
 from gcloud.aio.storage import Storage
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -71,7 +75,7 @@ else:
 
 
 storage_backend = os.getenv('EQ_STORAGE_BACKEND')
-if storage_backend == 'gcs':
+if storage_backend in ('gcs', 'gc_datastore'):
     class ComputeEngineToken(Token):
 
         def __init__(self, project, session=None):
@@ -123,6 +127,8 @@ if storage_backend == 'gcs':
             self.acquiring = None
             return True
 
+
+if storage_backend == 'gcs':
     project = os.getenv('GOOGLE_CLOUD_PROJECT')
     session = ClientSession(connector=TCPConnector(limit=int(os.getenv('EQ_GCS_MAX_POOL_CONNECTIONS', '30'))))
     creds = os.getenv('EQ_GCS_CREDENTIALS', 'META')
@@ -152,6 +158,67 @@ if storage_backend == 'gcs':
     @backoff.on_exception(backoff.expo, Exception, max_tries=10)
     async def delete_answers(user_id):
         await storage.delete(os.getenv('EQ_GCS_BUCKET_ID'), 'flat/' + user_id)
+
+if storage_backend == 'gc_datastore':
+    project = os.getenv('GOOGLE_CLOUD_PROJECT')
+    session = ClientSession(connector=TCPConnector(limit=int(os.getenv('EQ_GCS_MAX_POOL_CONNECTIONS', '30'))))
+    creds = os.getenv('EQ_GCS_CREDENTIALS', 'META')
+    if creds == 'META':
+        token = ComputeEngineToken(project, session=session)
+        ds = Datastore(project, None, token=token, session=session)
+    else:
+        ds = Datastore(project, creds, session=session)
+
+    @backoff.on_exception(backoff.expo, Exception, max_tries=10)
+    async def get_answers(user_id, key):
+        logging.info('get answers start')
+        ds_key = Key(project, [PathElement(kind='AnswerStore', name=user_id)])
+        results = await ds.lookup([ds_key])
+        logging.info('get answers done')
+
+        if results['found']:
+            item = results['found'][0]
+            return decrypt_data(key, item.entity.properties['data'])
+
+        return {}
+
+    @backoff.on_exception(backoff.expo, Exception, max_tries=10)
+    async def put_answers(user_id, answers, key):
+        logging.info('put answers start')
+        mode = Mode.TRANSACTIONAL
+
+        mutation = ds.make_mutation(
+            Operation.UPSERT,
+            Key(project,
+            [PathElement(kind='AnswerStore', name=user_id)]), properties={'data': encrypt_data(key, answers)})
+
+        url = f'https://datastore.googleapis.com/v1/projects/{ds.project}:commit'
+
+        transaction = await ds.beginTransaction()
+        body = ds._make_commit_body(transaction, mode, [mutation])
+
+        # all of this boilerplate is to enable this line to be hacked in
+        body['mutations'][0]['upsert']['properties']['data']['excludeFromIndexes'] = True
+
+        payload = ujson.dumps(body).encode('utf-8')
+
+        headers = await ds.headers()
+        headers.update({
+            'Content-Length': str(len(payload)),
+            'Content-Type': 'application/json',
+        })
+
+        resp = await session.post(url, data=payload, headers=headers,
+                                  timeout=10)
+        resp.raise_for_status()
+        logging.info('put answers done')
+
+    @backoff.on_exception(backoff.expo, Exception, max_tries=10)
+    async def delete_answers(user_id):
+        logging.info('delete answers start')
+        await ds.delete(Key(project, [PathElement(kind='AnswerStore', name=user_id)]))
+        logging.info('delete answers done')
+
 else:
     storage = {}
 

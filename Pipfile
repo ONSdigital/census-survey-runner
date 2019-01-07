@@ -6,6 +6,7 @@ verify_ssl = true
 [packages]
 sdc-cryptography = "==0.2.3"
 gcloud-aio-storage = "*"
+gcloud-aio-datastore = "*"
 ujson = "*"
 aiohttp = "*"
 aiodns = "*"
