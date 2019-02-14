@@ -159,7 +159,7 @@ if storage_backend == 'gcs':
     async def delete_answers(user_id):
         await storage.delete(os.getenv('EQ_GCS_BUCKET_ID'), 'flat/' + user_id)
 
-if storage_backend == 'gc_datastore':
+elif storage_backend == 'gc_datastore':
     project = os.getenv('GOOGLE_CLOUD_PROJECT')
     session = ClientSession(connector=TCPConnector(limit=int(os.getenv('EQ_GCS_MAX_POOL_CONNECTIONS', '30'))))
     creds = os.getenv('EQ_GCS_CREDENTIALS', 'META')
