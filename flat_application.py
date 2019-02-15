@@ -157,7 +157,13 @@ if storage_backend == 'gcs':
 
     @backoff.on_exception(backoff.expo, Exception, max_tries=10)
     async def delete_answers(user_id):
-        await storage.delete(os.getenv('EQ_GCS_BUCKET_ID'), 'flat/' + user_id)
+        try:
+            await storage.delete(os.getenv('EQ_GCS_BUCKET_ID'), 'flat/' + user_id)
+        except ClientResponseError as e:
+            if e.status == 404:
+                return {}
+
+            raise e
 
 elif storage_backend == 'gc_datastore':
     project = os.getenv('GOOGLE_CLOUD_PROJECT')
